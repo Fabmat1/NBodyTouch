@@ -1,0 +1,20 @@
+# Install dependencies (assuming Raspberry Pi OS / Debian)
+sudo apt update
+sudo apt install -y build-essential cmake git \
+    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+    libgl1-mesa-dev
+
+# Build
+cd ~/NBodyTouch
+mkdir -p build
+cd build
+
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DUSE_SYSTEM_RAYLIB=OFF \
+    -DRPI_BUILD=ON
+
+cmake --build . -j4
+
+# Run
+./NBodyApp
