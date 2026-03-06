@@ -82,6 +82,8 @@ void UISlider::draw(Font font, float fontSize) const {
     }
 }
 
+// ── UISlider ───────────────────────────────────────────────────
+
 bool UISlider::update() {
     Vector2 mouse = GetMousePosition();
     bool changed  = false;
@@ -115,6 +117,12 @@ bool UISlider::update() {
             newVal = minVal + frac * (maxVal - minVal);
         }
 
+        // Snap to 0.25 steps when the slider range suggests it's the time slider
+        if (!useLog && snapStep > 0.0f) {
+            newVal = roundf(newVal / snapStep) * snapStep;
+        }
+
+        newVal = std::clamp(newVal, minVal, maxVal);
         if (newVal != value) { value = newVal; changed = true; }
     };
 
@@ -229,18 +237,18 @@ void UI::layout() {
     btnReset = { boxX + 2 * bPad + btnW, boxY + boxH - btnH - bPad, btnW, btnH };
 
     // ── Zoom panel — bottom-center ────────────────────
-    float zpW = 200.0f * s;
-    float zpH = 80.0f * s;
+    float zpW = 160.0f * s;
+    float zpH = 64.0f * s;
     float zpX = (float)sw * 0.5f - zpW * 0.5f;
     float zpY = (float)sh - zpH - 10.0f * s;
     zoomPanel = { zpX, zpY, zpW, zpH };
 
-    float zbW = 60.0f * s;
-    float zbH = 32.0f * s;
-    float zbGap = 20.0f * s;
+    float zbW = 48.0f * s;
+    float zbH = 28.0f * s;
+    float zbGap = 12.0f * s;
     float zbTotalW = 2 * zbW + zbGap;
     float zbX = zpX + (zpW - zbTotalW) * 0.5f;
-    float zbY = zpY + zpH - zbH - 8.0f * s;
+    float zbY = zpY + zpH - zbH - 6.0f * s;
     btnZoomIn  = { zbX, zbY, zbW, zbH };
     btnZoomOut = { zbX + zbW + zbGap, zbY, zbW, zbH };
 }
@@ -287,10 +295,11 @@ void UI::init(int screenW, int screenH) {
     massSlider.value  = 1.0f;
     massSlider.fmt    = "%.1f";
 
-    timeSlider.minVal = 0.0f;
-    timeSlider.maxVal = 5.0f;
-    timeSlider.value  = 1.0f;
-    timeSlider.fmt    = "%.2fx";
+    timeSlider.minVal   = 0.0f;
+    timeSlider.maxVal   = 5.0f;
+    timeSlider.value    = 1.0f;
+    timeSlider.fmt      = "%.2fx";
+    timeSlider.snapStep = 0.25f;
 
     loadFlags();
     layout();
@@ -455,16 +464,15 @@ void UI::drawZoomControls() const {
     float s  = scale();
     Vector2 mouse = GetMousePosition();
 
-    // Title and zoom level on top row
-    float headerFs = 14.0f * s;
-    drawText(loc(LKey::Zoom), zoomPanel.x + 12 * s, zoomPanel.y + 8 * s,
+    float headerFs = 13.0f * s;
+    drawText(loc(LKey::Zoom), zoomPanel.x + 8 * s, zoomPanel.y + 5 * s,
              headerFs, Color{180, 180, 200, 255});
 
     char zoomBuf[32];
     snprintf(zoomBuf, sizeof(zoomBuf), "%.1fx", cameraZoom);
     int ztw = measureText(zoomBuf, headerFs);
-    drawText(zoomBuf, zoomPanel.x + zoomPanel.width - ztw - 12 * s,
-             zoomPanel.y + 8 * s, headerFs, WHITE);
+    drawText(zoomBuf, zoomPanel.x + zoomPanel.width - ztw - 8 * s,
+             zoomPanel.y + 5 * s, headerFs, WHITE);
 
     // Buttons
     float btnFs = 20.0f * s;
@@ -541,8 +549,7 @@ void UI::update(Simulation &sim, float &outMass) {
     massSlider.update();
 
     if (timeSlider.update()) {
-        if (sim.timeScale > 0.001f)
-            sim.timeScale = timeSlider.value;
+        sim.timeScale = timeSlider.value;  
     }
 
     // Zoom buttons (continuous while held)
@@ -601,7 +608,7 @@ void UI::draw(const Simulation &sim, float mass) {
     {
         char buf[64];
         snprintf(buf, sizeof(buf), loc(LKey::StarsCount), sim.starCount, MAX_STARS);
-        float counterY = hrRect.y + hrRect.height + 12.0f * s;
+        float counterY = hrRect.y + hrRect.height + 22.0f * s;   // was 12.0f
         drawText(buf, rightPanel.x + 15 * s, counterY, 13 * s, Color{100,105,130,255});
     }
 

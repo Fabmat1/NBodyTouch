@@ -9,6 +9,7 @@ struct UISlider {
     float     minVal;
     float     maxVal;
     float     value;
+    float     snapStep  = 0.0f;  
     const char *label;
     const char *fmt;
     bool       dragging = false;
