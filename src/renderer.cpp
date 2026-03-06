@@ -74,15 +74,18 @@ void Renderer::loadSkybox() {
     skyboxLoaded = true;
     for (int i = 0; i < 6; i++) {
         const char *path = AssetPath(SKY_FACES_REL[i]);
+#ifndef PLATFORM_ANDROID
         if (!FileExists(path)) {
             TraceLog(LOG_WARNING, "Skybox face missing: %s", path);
             skyboxLoaded = false;
             return;
         }
+#endif
         skyFaces[i] = LoadTexture(path);
         SetTextureFilter(skyFaces[i], TEXTURE_FILTER_BILINEAR);
         SetTextureWrap(skyFaces[i], TEXTURE_WRAP_CLAMP);
         if (skyFaces[i].id == 0) {
+            TraceLog(LOG_WARNING, "Skybox face failed to load: %s", path);
             skyboxLoaded = false;
             return;
         }
@@ -90,7 +93,6 @@ void Renderer::loadSkybox() {
     skyFacesLoaded = true;
     TraceLog(LOG_INFO, "Skybox loaded (%dx%d per face)", skyFaces[0].width, skyFaces[0].height);
 }
-
 static void drawSkyFace(unsigned int texId,
                          Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3) {
     rlSetTexture(texId);

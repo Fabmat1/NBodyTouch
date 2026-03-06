@@ -21,3 +21,11 @@ Makefile
 __pycache__/
 *.pyc
 .env
+
+# Android build artifacts
+android/app/.cxx/
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+android/gradle/wrapper/gradle-wrapper.jar

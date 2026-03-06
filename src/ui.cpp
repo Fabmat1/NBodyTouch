@@ -6,13 +6,19 @@
 #include "ui.h"
 #include "star.h"
 #include "assets.h"
-#include "locale.h"
+#include "localization.h"
 #include "compat.h"
 
 // ── Helpers ────────────────────────────────────────────────────
 
 float UI::scale() const {
-    return fminf((float)sw / 1920.0f, (float)sh / 1080.0f);
+    float s = fminf((float)sw / 1920.0f, (float)sh / 1080.0f);
+#ifdef PLATFORM_ANDROID
+    // Phone screens are physically small but high-res,
+    // scale UI up so it's usable with fingers
+    s *= 2.2f;
+#endif
+    return s;
 }
 
 const char *UI::loc(LKey key) const {
@@ -140,11 +146,12 @@ bool UISlider::update() {
 
 void UI::loadHRData(const char *path) {
     hrData.clear();
+#ifndef PLATFORM_ANDROID
     if (!FileExists(path)) {
         TraceLog(LOG_WARNING, "HR data file not found: %s", path);
         return;
     }
-
+#endif
     char *text = LoadFileText(path);
     if (!text) return;
 
@@ -168,21 +175,22 @@ void UI::loadHRData(const char *path) {
 // ── Flag loading ───────────────────────────────────────────────
 
 void UI::loadFlags() {
+    // src/ui.cpp — inside loadFlags() loop
     for (int i = 0; i < LANGUAGE_COUNT; i++) {
         char rel[256];
         snprintf(rel, sizeof(rel), "assets/locale_flags/%s", LANGUAGES[i].flagFile);
         const char *fullPath = AssetPath(rel);
 
-        if (FileExists(fullPath)) {
-            flagTextures[i] = LoadTexture(fullPath);
-            SetTextureFilter(flagTextures[i], TEXTURE_FILTER_BILINEAR);
-            flagsLoaded[i] = (flagTextures[i].id != 0);
-            if (flagsLoaded[i])
-                TraceLog(LOG_INFO, "Flag loaded: %s", fullPath);
-        } else {
+#ifndef PLATFORM_ANDROID
+        if (!FileExists(fullPath)) {
             flagsLoaded[i] = false;
             TraceLog(LOG_WARNING, "Flag texture not found: %s", fullPath);
+            continue;
         }
+#endif
+        flagTextures[i] = LoadTexture(fullPath);
+        SetTextureFilter(flagTextures[i], TEXTURE_FILTER_BILINEAR);
+        flagsLoaded[i] = (flagTextures[i].id != 0);
     }
 }
 
@@ -275,11 +283,15 @@ void UI::init(int screenW, int screenH) {
         "assets/fonts/Inter_24pt-Bold.ttf",
         "assets/fonts/ui_font.ttf",
     };
+    // src/ui.cpp — font loading block in UI::init()
     fontLoaded = false;
     for (auto &rel : fontRelPaths) {
         const char *path = AssetPath(rel);
-        if (FileExists(path)) {
-            uiFont = LoadFontEx(path, 48, codepoints, cpCount);
+#ifndef PLATFORM_ANDROID
+        if (!FileExists(path)) continue;
+#endif
+        uiFont = LoadFontEx(path, 48, codepoints, cpCount);
+        if (uiFont.texture.id != 0) {
             SetTextureFilter(uiFont.texture, TEXTURE_FILTER_BILINEAR);
             fontLoaded = true;
             TraceLog(LOG_INFO, "UI font loaded: %s (%d codepoints)", path, cpCount);

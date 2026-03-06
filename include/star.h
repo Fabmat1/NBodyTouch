@@ -7,8 +7,15 @@ constexpr float G_CONST   = 40.0f;
 constexpr int   MAX_TRAIL  = 200;
 constexpr int   MAX_STARS  = 64;
 
-constexpr int   SCREEN_W   = 1920;
-constexpr int   SCREEN_H   = 1080;
+#ifdef PLATFORM_ANDROID
+constexpr int SCREEN_W = 1920;  // won't be used, overridden at runtime
+constexpr int SCREEN_H = 1080;
+constexpr float UI_SCALE_BOOST = 2.2f;
+#else
+constexpr int SCREEN_W = 1920;
+constexpr int SCREEN_H = 1080;
+constexpr float UI_SCALE_BOOST = 1.0f;
+#endif
 
 struct Star {
     Vector3 pos;
