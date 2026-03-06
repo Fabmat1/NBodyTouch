@@ -1,12 +1,14 @@
-#include "renderer.h"
-#include "rlgl.h"
 #include <cmath>
 #include <algorithm>
 
-static Texture2D skyFaces[6]  = {};
+#include "renderer.h"
+#include "assets.h"
+#include "rlgl.h"
+
+static Texture2D skyFaces[6]   = {};
 static bool      skyFacesLoaded = false;
 
-static const char *SKY_PATHS[6] = {
+static const char *SKY_FACES_REL[6] = {
     "assets/skybox/sky_pos_x.png",
     "assets/skybox/sky_neg_x.png",
     "assets/skybox/sky_pos_y.png",
@@ -71,12 +73,13 @@ void Renderer::init(int w, int h) {
 void Renderer::loadSkybox() {
     skyboxLoaded = true;
     for (int i = 0; i < 6; i++) {
-        if (!FileExists(SKY_PATHS[i])) {
-            TraceLog(LOG_WARNING, "Skybox face missing: %s", SKY_PATHS[i]);
+        const char *path = AssetPath(SKY_FACES_REL[i]);
+        if (!FileExists(path)) {
+            TraceLog(LOG_WARNING, "Skybox face missing: %s", path);
             skyboxLoaded = false;
             return;
         }
-        skyFaces[i] = LoadTexture(SKY_PATHS[i]);
+        skyFaces[i] = LoadTexture(path);
         SetTextureFilter(skyFaces[i], TEXTURE_FILTER_BILINEAR);
         SetTextureWrap(skyFaces[i], TEXTURE_WRAP_CLAMP);
         if (skyFaces[i].id == 0) {
@@ -197,17 +200,13 @@ void Renderer::drawScene(const Simulation &sim) {
 
         drawSkybox();
 
-        // Everything after skybox: additive blend, no depth write
-        // This means trails glow through bloom instead of turning black
         rlDrawRenderBatchActive();
         rlDisableDepthMask();
         BeginBlendMode(BLEND_ADDITIVE);
 
-        // Trails first (behind stars visually, but additive so no occlusion)
         for (int i = 0; i < sim.starCount; i++)
             drawTrail(sim.stars[i]);
 
-        // Stars on top
         for (int i = 0; i < sim.starCount; i++)
             drawStar(sim.stars[i]);
 
@@ -216,6 +215,14 @@ void Renderer::drawScene(const Simulation &sim) {
         rlEnableDepthMask();
 
     EndMode3D();
+}
+
+void Renderer::zoomCamera(float delta) {
+    Vector3 dir = Vector3Subtract(camera.target, camera.position);
+    float dist = Vector3Length(dir);
+    if (dist < 2.0f && delta > 0.0f) return;
+    dir = Vector3Scale(Vector3Normalize(dir), delta);
+    camera.position = Vector3Add(camera.position, dir);
 }
 
 void Renderer::shutdown() {

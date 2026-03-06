@@ -1,4 +1,5 @@
 #include "app.h"
+#include "assets.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -18,11 +19,15 @@ int main(int argc, char *argv[]) {
         else if ((strcmp(argv[i], "--height") == 0 || strcmp(argv[i], "-h") == 0) && i + 1 < argc) {
             height = atoi(argv[++i]);
         }
+        else if ((strcmp(argv[i], "--root") == 0 || strcmp(argv[i], "-r") == 0) && i + 1 < argc) {
+            SetAssetRoot(argv[++i]);
+        }
         else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("  -d, --debug          Show FPS and debug info\n");
             printf("  -w, --width  <int>   Window width  (default %d)\n", SCREEN_W);
             printf("  -h, --height <int>   Window height (default %d)\n", SCREEN_H);
+            printf("  -r, --root   <path>  Program root directory for assets\n");
             return 0;
         }
     }

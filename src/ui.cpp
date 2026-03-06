@@ -1,12 +1,23 @@
-#include "ui.h"
-#include "star.h"
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
 #include <cstring>
+
+#include "ui.h"
+#include "star.h"
+#include "assets.h"
+#include "locale.h"
 #include "compat.h"
 
 // ── Helpers ────────────────────────────────────────────────────
+
+float UI::scale() const {
+    return fminf((float)sw / 1920.0f, (float)sh / 1080.0f);
+}
+
+const char *UI::loc(LKey key) const {
+    return LANGUAGES[currentLang].strings[(int)key];
+}
 
 void UI::drawText(const char *text, float x, float y, float size, Color col) const {
     if (fontLoaded) {
@@ -29,10 +40,9 @@ int UI::measureText(const char *text, float size) const {
 void UISlider::draw(Font font, float fontSize) const {
     float knobR    = (bounds.height - 2.0f) * 0.5f;
     float usableW  = bounds.width - 2.0f * knobR;
-    float trackH   = 6.0f;
+    float trackH   = fmaxf(2.0f, bounds.height * 0.22f);
     float trackY   = bounds.y + bounds.height * 0.5f - trackH * 0.5f;
 
-    // Convert value to 0..1 fraction (log-space if range spans > 10x)
     float range = maxVal / fmaxf(minVal, 1e-6f);
     float frac;
     if (range > 10.0f && minVal > 0.0f) {
@@ -55,7 +65,8 @@ void UISlider::draw(Font font, float fontSize) const {
     DrawCircle((int)knobX, (int)knobY, knobR + 1, Color{30, 30, 40, 255});
     DrawCircle((int)knobX, (int)knobY, knobR, Color{180, 200, 255, 255});
 
-    float labelY = bounds.y - fontSize - 4.0f;
+    float labelGap = fontSize * 0.3f;
+    float labelY   = bounds.y - fontSize - labelGap;
     if (font.texture.id > 0) {
         DrawTextEx(font, label, {bounds.x, labelY}, fontSize, 1.0f, Color{180,180,200,255});
         char buf[64];
@@ -75,7 +86,10 @@ bool UISlider::update() {
     Vector2 mouse = GetMousePosition();
     bool changed  = false;
 
-    Rectangle hitArea = { bounds.x - 8, bounds.y - 12, bounds.width + 16, bounds.height + 24 };
+    float padX = bounds.height * 0.3f;
+    float padY = bounds.height * 0.45f;
+    Rectangle hitArea = { bounds.x - padX, bounds.y - padY,
+                          bounds.width + 2 * padX, bounds.height + 2 * padY };
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
         CheckCollisionPointRec(mouse, hitArea)) {
@@ -128,7 +142,6 @@ void UI::loadHRData(const char *path) {
 
     char *line = strtok(text, "\n\r");
     while (line) {
-        // Skip comments and empty lines
         if (line[0] == '#' || line[0] == '\0') {
             line = strtok(nullptr, "\n\r");
             continue;
@@ -144,25 +157,124 @@ void UI::loadHRData(const char *path) {
     TraceLog(LOG_INFO, "Loaded %d HR diagram points from %s", (int)hrData.size(), path);
 }
 
+// ── Flag loading ───────────────────────────────────────────────
+
+void UI::loadFlags() {
+    for (int i = 0; i < LANGUAGE_COUNT; i++) {
+        char rel[256];
+        snprintf(rel, sizeof(rel), "assets/locale_flags/%s", LANGUAGES[i].flagFile);
+        const char *fullPath = AssetPath(rel);
+
+        if (FileExists(fullPath)) {
+            flagTextures[i] = LoadTexture(fullPath);
+            SetTextureFilter(flagTextures[i], TEXTURE_FILTER_BILINEAR);
+            flagsLoaded[i] = (flagTextures[i].id != 0);
+            if (flagsLoaded[i])
+                TraceLog(LOG_INFO, "Flag loaded: %s", fullPath);
+        } else {
+            flagsLoaded[i] = false;
+            TraceLog(LOG_WARNING, "Flag texture not found: %s", fullPath);
+        }
+    }
+}
+
+// ── Layout ─────────────────────────────────────────────────────
+
+void UI::layout() {
+    float s = scale();
+
+    // ── Right panel ───────────────────────────────────
+    float panelW = 250.0f * s;
+    float panelX = (float)sw - panelW;
+    rightPanel = { panelX, 0, panelW, (float)sh };
+
+    // Language flags
+    float flagW   = 36.0f * s;
+    float flagH   = 24.0f * s;
+    float flagGap = 8.0f * s;
+    float totalFW = LANGUAGE_COUNT * flagW + (LANGUAGE_COUNT - 1) * flagGap;
+    float flagX0  = panelX + (panelW - totalFW) * 0.5f;
+    float flagY   = 10.0f * s;
+    for (int i = 0; i < LANGUAGE_COUNT; i++) {
+        flagRects[i] = { flagX0 + i * (flagW + flagGap), flagY, flagW, flagH };
+    }
+
+    float pad     = 20.0f * s;
+    float sliderW = panelW - 2.0f * pad;
+    float sliderH = 28.0f * s;
+
+    massSlider.bounds = { panelX + pad, 98.0f * s, sliderW, sliderH };
+    massSlider.label  = loc(LKey::MassSun);
+
+    hrRect = { panelX + 10.0f * s, 155.0f * s, panelW - 20.0f * s, 260.0f * s };
+
+    // Quit button at bottom of right panel
+    btnQuit = { panelX + 5.0f * s, (float)sh - 46.0f * s, panelW - 10.0f * s, 36.0f * s };
+
+    // ── Bottom-left panel ─────────────────────────────
+    float boxW = 240.0f * s;
+    float boxH = 120.0f * s;
+    float boxX = 10.0f * s;
+    float boxY = (float)sh - boxH - 10.0f * s;
+    bottomLeftPanel = { boxX, boxY, boxW, boxH };
+
+    float bPad = 14.0f * s;
+    float btnW = (boxW - 3 * bPad) * 0.5f;
+    float btnH = 36.0f * s;
+
+    timeSlider.bounds = { boxX + bPad, boxY + 38.0f * s, boxW - 2 * bPad, 24.0f * s };
+    timeSlider.label  = loc(LKey::SimSpeed);
+
+    btnPause = { boxX + bPad,            boxY + boxH - btnH - bPad, btnW, btnH };
+    btnReset = { boxX + 2 * bPad + btnW, boxY + boxH - btnH - bPad, btnW, btnH };
+
+    // ── Zoom panel — bottom-center ────────────────────
+    float zpW = 200.0f * s;
+    float zpH = 80.0f * s;
+    float zpX = (float)sw * 0.5f - zpW * 0.5f;
+    float zpY = (float)sh - zpH - 10.0f * s;
+    zoomPanel = { zpX, zpY, zpW, zpH };
+
+    float zbW = 60.0f * s;
+    float zbH = 32.0f * s;
+    float zbGap = 20.0f * s;
+    float zbTotalW = 2 * zbW + zbGap;
+    float zbX = zpX + (zpW - zbTotalW) * 0.5f;
+    float zbY = zpY + zpH - zbH - 8.0f * s;
+    btnZoomIn  = { zbX, zbY, zbW, zbH };
+    btnZoomOut = { zbX + zbW + zbGap, zbY, zbW, zbH };
+}
+
 // ── UI init ────────────────────────────────────────────────────
 
 void UI::init(int screenW, int screenH) {
     sw = screenW;
     sh = screenH;
 
-    const char *fontPaths[] = {
+    // Build codepoint set: ASCII + Latin Extended + German/European + common symbols
+    int codepoints[1024];
+    int cpCount = 0;
+    for (int i = 32;   i <= 126;  i++) codepoints[cpCount++] = i;   // ASCII
+    for (int i = 160;  i <= 591;  i++) codepoints[cpCount++] = i;   // Latin-1 Supp + Latin Extended-A/B
+    for (int i = 8192; i <= 8303; i++) codepoints[cpCount++] = i;   // General Punctuation (—, –, …)
+    for (int i = 8320; i <= 8399; i++) codepoints[cpCount++] = i;   // Superscripts/Subscripts
+    codepoints[cpCount++] = 0x00D7;  // ×
+    codepoints[cpCount++] = 0x2609;  // ☉ (sun symbol)
+
+    const char *fontRelPaths[] = {
         "assets/fonts/Inter_18pt-Medium.ttf",
         "assets/fonts/Inter_18pt-Regular.ttf",
         "assets/fonts/Inter_24pt-Bold.ttf",
         "assets/fonts/ui_font.ttf",
     };
     fontLoaded = false;
-    for (auto &path : fontPaths) {
+    for (auto &rel : fontRelPaths) {
+        const char *path = AssetPath(rel);
         if (FileExists(path)) {
-            uiFont = LoadFontEx(path, 32, nullptr, 0);
+            uiFont = LoadFontEx(path, 48, codepoints, cpCount);
             SetTextureFilter(uiFont.texture, TEXTURE_FILTER_BILINEAR);
             fontLoaded = true;
-            TraceLog(LOG_INFO, "UI font loaded: %s", path);
+            TraceLog(LOG_INFO, "UI font loaded: %s (%d codepoints)", path, cpCount);
             break;
         }
     }
@@ -170,40 +282,20 @@ void UI::init(int screenW, int screenH) {
         uiFont = GetFontDefault();
     }
 
-    // ── Right panel ───────────────────────────────────
-    float panelX = sw - 240.0f;
-    float sliderW = 200.0f;
-    float sliderH = 28.0f;
+    massSlider.minVal = 0.1f;
+    massSlider.maxVal = 50.0f;
+    massSlider.value  = 1.0f;
+    massSlider.fmt    = "%.1f";
 
-    massSlider = {
-        { panelX + 20, 80, sliderW, sliderH },
-        0.1f, 50.0f, 1.0f, "Mass (Msun)", "%.1f"
-    };
+    timeSlider.minVal = 0.0f;
+    timeSlider.maxVal = 5.0f;
+    timeSlider.value  = 1.0f;
+    timeSlider.fmt    = "%.2fx";
 
-    // HR diagram gets more space now (no age slider)
-    hrRect = { panelX + 10, 140, 220, 260 };
+    loadFlags();
+    layout();
 
-    // ── Bottom-left ───────────────────────────────────
-    float boxW = 240.0f;
-    float boxH = 120.0f;
-    float boxX = 10.0f;
-    float boxY = sh - boxH - 10.0f;
-    float pad  = 14.0f;
-    float btnW = (boxW - 3 * pad) * 0.5f;
-    float btnH = 36.0f;
-
-    timeSlider = {
-        { boxX + pad, boxY + 38, boxW - 2 * pad, 24 },
-        0.0f, 5.0f, 1.0f, "Sim Speed", "%.2fx"
-    };
-
-    btnPause = { boxX + pad,            boxY + boxH - btnH - pad, btnW, btnH };
-    btnReset = { boxX + 2 * pad + btnW, boxY + boxH - btnH - pad, btnW, btnH };
-    // Quit button — top-left
-    btnQuit = { (float)sw - 245, (float)sh - 56, 240, 36 };
-
-    // Load HR background data
-    loadHRData("assets/hr_data.csv");
+    loadHRData(AssetPath("assets/hr_data.csv"));
 }
 
 void UI::shutdown() {
@@ -211,125 +303,241 @@ void UI::shutdown() {
         UnloadFont(uiFont);
         fontLoaded = false;
     }
+    for (int i = 0; i < LANGUAGE_COUNT; i++) {
+        if (flagsLoaded[i]) {
+            UnloadTexture(flagTextures[i]);
+            flagsLoaded[i] = false;
+        }
+    }
+}
+
+// ── Language selector ──────────────────────────────────────────
+
+void UI::updateLanguageSelector() {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        Vector2 mouse = GetMousePosition();
+        for (int i = 0; i < LANGUAGE_COUNT; i++) {
+            if (CheckCollisionPointRec(mouse, flagRects[i])) {
+                if (i != currentLang) {
+                    currentLang = i;
+                    layout();
+                }
+                return;
+            }
+        }
+    }
+    if (GetTouchPointCount() > 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        for (int t = 0; t < GetTouchPointCount(); t++) {
+            Vector2 tp = GetTouchPosition(t);
+            for (int i = 0; i < LANGUAGE_COUNT; i++) {
+                if (CheckCollisionPointRec(tp, flagRects[i])) {
+                    if (i != currentLang) {
+                        currentLang = i;
+                        layout();
+                    }
+                    return;
+                }
+            }
+        }
+    }
+}
+
+void UI::drawLanguageSelector() const {
+    float s = scale();
+    for (int i = 0; i < LANGUAGE_COUNT; i++) {
+        Rectangle r = flagRects[i];
+
+        DrawRectangleRounded(r, 0.15f, 4, Color{30, 30, 45, 200});
+
+        Color tint = (i == currentLang) ? WHITE : Color{160, 160, 160, 180};
+        if (flagsLoaded[i]) {
+            DrawTexturePro(flagTextures[i],
+                {0, 0, (float)flagTextures[i].width, (float)flagTextures[i].height},
+                r, {0, 0}, 0.0f, tint);
+        } else {
+            float fs = r.height * 0.55f;
+            const char *code = LANGUAGES[i].code;
+            int tw = measureText(code, fs);
+            drawText(code,
+                     r.x + (r.width - tw) * 0.5f,
+                     r.y + (r.height - fs) * 0.5f,
+                     fs, tint);
+        }
+
+        if (i == currentLang) {
+            DrawRectangleRoundedLinesEx(r, 0.15f, 4, 2.0f * s, Color{100, 180, 255, 255});
+        } else {
+            DrawRectangleRoundedLinesEx(r, 0.15f, 4, 1.0f * s, Color{70, 70, 90, 150});
+        }
+    }
 }
 
 // ── Panel backgrounds ──────────────────────────────────────────
 
 void UI::drawPanelBackgrounds() const {
-    Rectangle rp = { (float)sw - 250.0f, 0, 250, (float)sh };
-    DrawRectangleRounded(rp, 0.02f, 8, Color{12, 14, 22, 210});
-    DrawRectangleRoundedLinesEx(rp, 0.02f, 8, 1.0f, Color{50, 55, 75, 200});
+    float s = scale();
 
-    float boxW = 240.0f, boxH = 120.0f, boxX = 10.0f, boxY = sh - boxH - 10.0f;
-    Rectangle bl = { boxX, boxY, boxW, boxH };
-    DrawRectangleRounded(bl, 0.08f, 8, Color{12, 14, 22, 210});
-    DrawRectangleRoundedLinesEx(bl, 0.08f, 8, 1.0f, Color{50, 55, 75, 200});
+    DrawRectangleRounded(rightPanel, 0.02f, 8, Color{12, 14, 22, 210});
+    DrawRectangleRoundedLinesEx(rightPanel, 0.02f, 8, 1.0f * s, Color{50, 55, 75, 200});
+
+    DrawRectangleRounded(bottomLeftPanel, 0.08f, 8, Color{12, 14, 22, 210});
+    DrawRectangleRoundedLinesEx(bottomLeftPanel, 0.08f, 8, 1.0f * s, Color{50, 55, 75, 200});
+
+    DrawRectangleRounded(zoomPanel, 0.08f, 8, Color{12, 14, 22, 210});
+    DrawRectangleRoundedLinesEx(zoomPanel, 0.08f, 8, 1.0f * s, Color{50, 55, 75, 200});
 }
 
 // ── H-R Diagram ────────────────────────────────────────────────
 
-// Map (teff, luminosity) → pixel position in HR rect
 static Vector2 hrToPixel(const Rectangle &r, float teff, float lum) {
     float tMin = 2000.0f, tMax = 40000.0f;
     float lMin = -4.5f,   lMax = 6.5f;
 
-    float xFrac = 1.0f - (teff - tMin) / (tMax - tMin);   // hot = left
+    float xFrac = 1.0f - (teff - tMin) / (tMax - tMin);
     float yFrac = 1.0f - (log10f(fmaxf(lum, 1e-6f)) - lMin) / (lMax - lMin);
 
     xFrac = std::clamp(xFrac, 0.0f, 1.0f);
     yFrac = std::clamp(yFrac, 0.0f, 1.0f);
 
-    float px = r.x + 15 + xFrac * (r.width - 30);
-    float py = r.y + 15 + yFrac * (r.height - 30);
+    float mx = r.width  * 0.07f;
+    float my = r.height * 0.058f;
+
+    float px = r.x + mx + xFrac * (r.width  - 2.0f * mx);
+    float py = r.y + my + yFrac * (r.height - 2.0f * my);
     return {px, py};
 }
 
 void UI::drawHRDiagram(float mass) const {
-    DrawRectangleRounded(hrRect, 0.06f, 8, Color{8, 8, 16, 230});
-    DrawRectangleRoundedLinesEx(hrRect, 0.06f, 8, 1.0f, Color{60, 65, 85, 200});
+    float s = scale();
 
-    float fs = 13.0f;
-    const char *title = "H-R Diagram";
+    DrawRectangleRounded(hrRect, 0.06f, 8, Color{8, 8, 16, 230});
+    DrawRectangleRoundedLinesEx(hrRect, 0.06f, 8, 1.0f * s, Color{60, 65, 85, 200});
+
+    float fs = 13.0f * s;
+    const char *title = loc(LKey::HRDiagram);
     drawText(title, hrRect.x + hrRect.width * 0.5f -
-             measureText(title, fs) * 0.5f, hrRect.y - fs - 4, fs,
+             measureText(title, fs) * 0.5f, hrRect.y - fs - 4 * s, fs,
              Color{140,145,170,255});
 
-    drawText("Hot",  hrRect.x + 4, hrRect.y + hrRect.height + 4, 11, Color{130,140,255,255});
-    drawText("Cool", hrRect.x + hrRect.width - measureText("Cool", 11) - 4,
-             hrRect.y + hrRect.height + 4, 11, Color{255,140,80,255});
-    drawText("L", hrRect.x - 14, hrRect.y + hrRect.height * 0.5f - 5, 11, Color{140,145,170,200});
+    float labelFs = 11.0f * s;
+    drawText(loc(LKey::Hot), hrRect.x + 4 * s,
+             hrRect.y + hrRect.height + 4 * s, labelFs, Color{130,140,255,255});
+    drawText(loc(LKey::Cool),
+             hrRect.x + hrRect.width - measureText(loc(LKey::Cool), labelFs) - 4 * s,
+             hrRect.y + hrRect.height + 4 * s, labelFs, Color{255,140,80,255});
+    drawText("L", hrRect.x - 14 * s,
+             hrRect.y + hrRect.height * 0.5f - 5 * s, labelFs, Color{140,145,170,200});
 
-    // Background data points from CSV
+    float dotR = 3.0f * s;
     for (auto &pt : hrData) {
         Vector2 p = hrToPixel(hrRect, pt.teff, pt.luminosity);
         Color col = temperatureToColor(pt.teff);
         col.a = 120;
-        DrawCircle((int)p.x, (int)p.y, 3.0f, col);
+        DrawCircle((int)p.x, (int)p.y, dotR, col);
     }
 
-    // Faint main sequence band
-    for (int i = 0; i < 3; i++) {
-        float off = (float)(i - 1) * 6.0f;
-        DrawLine(
-            (int)(hrRect.x + 15 + off), (int)(hrRect.y + hrRect.height - 15),
-            (int)(hrRect.x + hrRect.width - 15 + off), (int)(hrRect.y + 15),
-            Color{35, 40, 55, 80});
-    }
-
-    // Current slider star at ZAMS (age=0)
     float r, l, t;
     stellarModel(mass, 0.0f, r, l, t);
 
     Vector2 starPos = hrToPixel(hrRect, t, l);
     Color starCol = temperatureToColor(t);
 
-    // Glow around indicator
-    DrawCircle((int)starPos.x, (int)starPos.y, 12, Color{starCol.r, starCol.g, starCol.b, 40});
-    DrawCircle((int)starPos.x, (int)starPos.y, 7, starCol);
-    DrawCircleLines((int)starPos.x, (int)starPos.y, 9, Color{255,255,255,200});
+    DrawCircle((int)starPos.x, (int)starPos.y, 12 * s,
+               Color{starCol.r, starCol.g, starCol.b, 40});
+    DrawCircle((int)starPos.x, (int)starPos.y, 7 * s, starCol);
+    DrawCircleLines((int)starPos.x, (int)starPos.y, (int)(9 * s),
+                    Color{255,255,255,200});
 }
 
-// ── Time controls ──────────────────────────────────────────────
+// ── Zoom controls — bottom-center panel ────────────────────────
 
-void UI::drawTimeControls(Simulation &sim) {
+void UI::drawZoomControls() const {
+    float s  = scale();
     Vector2 mouse = GetMousePosition();
-    bool overPause = CheckCollisionPointRec(mouse, btnPause);
-    bool overReset = CheckCollisionPointRec(mouse, btnReset);
+
+    // Title and zoom level on top row
+    float headerFs = 14.0f * s;
+    drawText(loc(LKey::Zoom), zoomPanel.x + 12 * s, zoomPanel.y + 8 * s,
+             headerFs, Color{180, 180, 200, 255});
+
+    char zoomBuf[32];
+    snprintf(zoomBuf, sizeof(zoomBuf), "%.1fx", cameraZoom);
+    int ztw = measureText(zoomBuf, headerFs);
+    drawText(zoomBuf, zoomPanel.x + zoomPanel.width - ztw - 12 * s,
+             zoomPanel.y + 8 * s, headerFs, WHITE);
+
+    // Buttons
+    float btnFs = 20.0f * s;
 
     {
-        Color bg = overPause ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
+        bool over = CheckCollisionPointRec(mouse, btnZoomIn);
+        Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
+        DrawRectangleRounded(btnZoomIn, 0.3f, 8, bg);
+        DrawRectangleRoundedLinesEx(btnZoomIn, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
+        const char *txt = loc(LKey::ZoomIn);
+        int tw = measureText(txt, btnFs);
+        drawText(txt, btnZoomIn.x + btnZoomIn.width * 0.5f - tw * 0.5f,
+                 btnZoomIn.y + btnZoomIn.height * 0.5f - btnFs * 0.5f, btnFs, WHITE);
+    }
+
+    {
+        bool over = CheckCollisionPointRec(mouse, btnZoomOut);
+        Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
+        DrawRectangleRounded(btnZoomOut, 0.3f, 8, bg);
+        DrawRectangleRoundedLinesEx(btnZoomOut, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
+        const char *txt = loc(LKey::ZoomOut);
+        int tw = measureText(txt, btnFs);
+        drawText(txt, btnZoomOut.x + btnZoomOut.width * 0.5f - tw * 0.5f,
+                 btnZoomOut.y + btnZoomOut.height * 0.5f - btnFs * 0.5f, btnFs, WHITE);
+    }
+}
+
+// ── Time controls (draw only) ──────────────────────────────────
+
+void UI::drawTimeControls(const Simulation &sim) const {
+    float s = scale();
+    Vector2 mouse = GetMousePosition();
+
+    {
+        bool over = CheckCollisionPointRec(mouse, btnPause);
+        Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
         DrawRectangleRounded(btnPause, 0.3f, 8, bg);
-        DrawRectangleRoundedLinesEx(btnPause, 0.3f, 8, 1.0f, Color{90, 95, 130, 200});
-        const char *txt = (sim.timeScale <= 0.001f) ? "Play" : "Pause";
-        float fs = 15.0f;
+        DrawRectangleRoundedLinesEx(btnPause, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
+        const char *txt = (sim.timeScale <= 0.001f) ? loc(LKey::Play) : loc(LKey::Pause);
+        float fs = 15.0f * s;
         int tw = measureText(txt, fs);
         drawText(txt, btnPause.x + btnPause.width * 0.5f - tw * 0.5f,
                  btnPause.y + btnPause.height * 0.5f - fs * 0.5f, fs, WHITE);
     }
 
     {
-        Color bg = overReset ? Color{100, 45, 45, 255} : Color{55, 30, 30, 240};
+        bool over = CheckCollisionPointRec(mouse, btnReset);
+        Color bg = over ? Color{100, 45, 45, 255} : Color{55, 30, 30, 240};
         DrawRectangleRounded(btnReset, 0.3f, 8, bg);
-        DrawRectangleRoundedLinesEx(btnReset, 0.3f, 8, 1.0f, Color{130, 80, 80, 200});
-        const char *txt = "Clear";
-        float fs = 15.0f;
+        DrawRectangleRoundedLinesEx(btnReset, 0.3f, 8, 1.0f * s, Color{130, 80, 80, 200});
+        const char *txt = loc(LKey::Clear);
+        float fs = 15.0f * s;
         int tw = measureText(txt, fs);
         drawText(txt, btnReset.x + btnReset.width * 0.5f - tw * 0.5f,
                  btnReset.y + btnReset.height * 0.5f - fs * 0.5f, fs, WHITE);
     }
-
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (overPause) {
-            if (sim.timeScale > 0.001f) sim.timeScale = 0.0f;
-            else sim.timeScale = timeSlider.value > 0.01f ? timeSlider.value : 1.0f;
-        }
-        if (overReset) sim.clear();
-    }
 }
 
-// ── Main update / draw ─────────────────────────────────────────
+// ── Main update ────────────────────────────────────────────────
 
 void UI::update(Simulation &sim, float &outMass) {
+    int newW = GetScreenWidth();
+    int newH = GetScreenHeight();
+    if (newW != sw || newH != sh) {
+        sw = newW;
+        sh = newH;
+        layout();
+    }
+
+    zoomRequest = 0.0f;
+
+    updateLanguageSelector();
+
     massSlider.update();
 
     if (timeSlider.update()) {
@@ -337,64 +545,106 @@ void UI::update(Simulation &sim, float &outMass) {
             sim.timeScale = timeSlider.value;
     }
 
+    // Zoom buttons (continuous while held)
+    Vector2 mouse = GetMousePosition();
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse, btnZoomIn))  zoomRequest =  1.0f;
+        if (CheckCollisionPointRec(mouse, btnZoomOut)) zoomRequest = -1.0f;
+    }
+    for (int t = 0; t < GetTouchPointCount(); t++) {
+        Vector2 tp = GetTouchPosition(t);
+        if (CheckCollisionPointRec(tp, btnZoomIn))  zoomRequest =  1.0f;
+        if (CheckCollisionPointRec(tp, btnZoomOut)) zoomRequest = -1.0f;
+    }
+
+    // Pause / Clear
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse, btnPause)) {
+            if (sim.timeScale > 0.001f) sim.timeScale = 0.0f;
+            else sim.timeScale = timeSlider.value > 0.01f ? timeSlider.value : 1.0f;
+        }
+        if (CheckCollisionPointRec(mouse, btnReset))
+            sim.clear();
+    }
+
+    // Quit
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse, btnQuit))
+            quitRequested = true;
+    }
+    for (int t = 0; t < GetTouchPointCount(); t++) {
+        if (CheckCollisionPointRec(GetTouchPosition(t), btnQuit) &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            quitRequested = true;
+        }
+    }
+
     outMass = massSlider.value;
 }
 
+// ── Main draw ──────────────────────────────────────────────────
+
 void UI::draw(const Simulation &sim, float mass) {
+    float s = scale();
+
     drawPanelBackgrounds();
+    drawLanguageSelector();
 
-    drawText("Star Properties", sw - 240.0f + 20, 20, 20, Color{200,205,230,255});
+    float titleFs = 20.0f * s;
+    drawText(loc(LKey::StarProperties),
+             rightPanel.x + 20 * s, 48.0f * s, titleFs, Color{200,205,230,255});
 
-    massSlider.draw(uiFont, 14.0f);
+    massSlider.draw(uiFont, 14.0f * s);
     drawHRDiagram(mass);
 
-    timeSlider.draw(uiFont, 14.0f);
-    drawTimeControls(const_cast<Simulation &>(sim));
+    // Star count — below HR diagram inside right panel
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), loc(LKey::StarsCount), sim.starCount, MAX_STARS);
+        float counterY = hrRect.y + hrRect.height + 12.0f * s;
+        drawText(buf, rightPanel.x + 15 * s, counterY, 13 * s, Color{100,105,130,255});
+    }
 
-    char buf[64];
-    snprintf(buf, sizeof(buf), "Stars: %d / %d", sim.starCount, MAX_STARS);
-    drawText(buf, sw - 235.0f, sh - 30.0f, 13, Color{100,105,130,255});
+    drawZoomControls();
 
-    drawText("Touch & drag to place a star",                12, 12, 16, Color{160,165,185,200});
-    drawText("Scroll/pinch zoom - Right-drag orbit - 3-finger pan", 12, 32, 13, Color{100,105,130,180});
+    timeSlider.draw(uiFont, 14.0f * s);
+    drawTimeControls(sim);
 
-    // Quit / back button
+    // Help text
+    drawText(loc(LKey::TouchDragHint), 12 * s, 12 * s, 16 * s, Color{160,165,185,200});
+    drawText(loc(LKey::ControlsHint),  12 * s, 32 * s, 13 * s, Color{100,105,130,180});
+
+    // Quit button (visual)
     {
         Vector2 mouse = GetMousePosition();
         bool over = CheckCollisionPointRec(mouse, btnQuit);
         Color bg = over ? Color{70, 55, 55, 240} : Color{35, 30, 38, 220};
         DrawRectangleRounded(btnQuit, 0.3f, 8, bg);
-        DrawRectangleRoundedLinesEx(btnQuit, 0.3f, 8, 1.0f, Color{100, 80, 90, 200});
+        DrawRectangleRoundedLinesEx(btnQuit, 0.3f, 8, 1.0f * s, Color{100, 80, 90, 200});
 
-        const char *txt = "Zuruck zur App-Ubersicht";
-        float fs = 14.0f;
+        const char *txt = loc(LKey::BackToApp);
+        float fs = 14.0f * s;
         int tw = measureText(txt, fs);
         drawText(txt, btnQuit.x + btnQuit.width * 0.5f - tw * 0.5f,
                  btnQuit.y + btnQuit.height * 0.5f - fs * 0.5f, fs, Color{220,200,200,255});
-
-        if (over && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            quitRequested = true;
-        }
-        for (int t = 0; t < GetTouchPointCount(); t++) {
-            if (CheckCollisionPointRec(GetTouchPosition(t), btnQuit) &&
-                IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                quitRequested = true;
-            }
-        }
     }
 
     if (debugMode) {
-        DrawFPS(sw / 2 - 40, 10);
-        drawText(TextFormat("dt: %.3f ms", GetFrameTime() * 1000.0f), sw / 2 - 40, 30, 13, GREEN);
-        drawText(TextFormat("Time scale: %.3f", sim.timeScale), sw / 2 - 40, 46, 13, GREEN);
+        float cx = sw * 0.5f - 40 * s;
+        DrawFPS((int)cx, (int)(10 * s));
+        drawText(TextFormat("dt: %.3f ms", GetFrameTime() * 1000.0f),
+                 cx, 30 * s, 13 * s, GREEN);
+        drawText(TextFormat("Time scale: %.3f", sim.timeScale),
+                 cx, 46 * s, 13 * s, GREEN);
     }
 }
 
 bool UI::isOverUI(Vector2 pos) const {
-    if (CheckCollisionPointRec(pos, btnQuit)) return true;
-    if (pos.x > sw - 250) return true;
-    float boxW = 240.0f, boxH = 120.0f, boxX = 10.0f, boxY = sh - boxH - 10.0f;
-    if (pos.x >= boxX && pos.x <= boxX + boxW && pos.y >= boxY && pos.y <= boxY + boxH)
-        return true;
+    if (CheckCollisionPointRec(pos, rightPanel))      return true;
+    if (CheckCollisionPointRec(pos, bottomLeftPanel))  return true;
+    if (CheckCollisionPointRec(pos, zoomPanel))        return true;
+    for (int i = 0; i < LANGUAGE_COUNT; i++) {
+        if (CheckCollisionPointRec(pos, flagRects[i])) return true;
+    }
     return false;
 }

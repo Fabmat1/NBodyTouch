@@ -9,6 +9,7 @@ public:
     void init(int screenW, int screenH);
     void drawScene(const Simulation &sim);
     void shutdown();
+    void zoomCamera(float delta);
 
     bool skyboxLoaded = false;
 

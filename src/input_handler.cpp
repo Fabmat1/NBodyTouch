@@ -32,9 +32,7 @@ static void panCamera(Renderer &renderer, Vector2 screenDelta) {
 void InputHandler::handlePinchZoom(Renderer &renderer) {
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
-        Vector3 dir = Vector3Subtract(renderer.camera.target, renderer.camera.position);
-        dir = Vector3Scale(Vector3Normalize(dir), wheel * 3.0f);
-        renderer.camera.position = Vector3Add(renderer.camera.position, dir);
+        renderer.zoomCamera(wheel * 3.0f);
     }
 
     if (GetTouchPointCount() == 2) {
@@ -44,9 +42,7 @@ void InputHandler::handlePinchZoom(Renderer &renderer) {
 
         if (prevPinchDist > 0.0f) {
             float delta = (dist - prevPinchDist) * 0.08f;
-            Vector3 dir = Vector3Subtract(renderer.camera.target, renderer.camera.position);
-            dir = Vector3Scale(Vector3Normalize(dir), delta);
-            renderer.camera.position = Vector3Add(renderer.camera.position, dir);
+            renderer.zoomCamera(delta);
         }
         prevPinchDist = dist;
     } else {
@@ -112,7 +108,6 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
         IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) return;
     if (GetTouchPointCount() >= 2) return;
 
-    // Block star placement while shift-panning
     bool shiftHeld = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     if (shiftHeld) return;
 
@@ -140,4 +135,9 @@ void InputHandler::update(Simulation &sim, Renderer &renderer, const UI &ui, flo
     handleThreeFingerPan(renderer);
     handlePinchZoom(renderer);
     handleStarPlacement(sim, renderer, ui);
+
+    // UI zoom buttons
+    if (ui.zoomRequest != 0.0f) {
+        renderer.zoomCamera(ui.zoomRequest * dt * 30.0f);
+    }
 }

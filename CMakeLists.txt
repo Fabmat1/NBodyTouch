@@ -50,6 +50,7 @@ set(SOURCES
     src/renderer.cpp
     src/input_handler.cpp
     src/ui.cpp
+    src/assets.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

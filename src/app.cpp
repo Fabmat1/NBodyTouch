@@ -17,6 +17,9 @@ void App::run() {
         input.update(sim, renderer, ui, dt);
         sim.step(dt);
 
+        Vector3 camDiff = Vector3Subtract(renderer.camera.target, renderer.camera.position);
+        ui.cameraZoom = 44.72f / fmaxf(Vector3Length(camDiff), 0.1f);
+
         BeginDrawing();
             ClearBackground(BLACK);
 

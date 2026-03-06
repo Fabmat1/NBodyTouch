@@ -1,3 +1,5 @@
+// src/simulation.cpp
+
 #include "simulation.h"
 #include <cmath>
 
@@ -33,15 +35,28 @@ void Simulation::computeAccelerations(const State &s, int n, Vector3 *accel) con
             Vector3 diff = Vector3Subtract(s.pos[j], s.pos[i]);
             float dist2  = Vector3DotProduct(diff, diff) + softening * softening;
             float dist   = sqrtf(dist2);
-            float force  = G_CONST / (dist2 * dist); // G*m_i*m_j / r^3  (direction built in)
+            float inv_dist3 = 1.0f / (dist2 * dist);
 
-            Vector3 fi = Vector3Scale(diff, force * stars[j].mass);
-            Vector3 fj = Vector3Scale(diff, force * stars[i].mass);
+            Vector3 fi = Vector3Scale(diff, G_CONST * stars[j].mass * inv_dist3);
+            Vector3 fj = Vector3Scale(diff, G_CONST * stars[i].mass * inv_dist3);
 
             accel[i] = Vector3Add(accel[i], fi);
             accel[j] = Vector3Subtract(accel[j], fj);
         }
     }
+}
+
+// Returns the maximum acceleration magnitude across all active stars
+float Simulation::maxAcceleration(const State &s, int n) const {
+    Vector3 accel[MAX_STARS];
+    computeAccelerations(s, n, accel);
+    float maxA2 = 0.0f;
+    for (int i = 0; i < n; i++) {
+        if (!stars[i].active) continue;
+        float a2 = Vector3DotProduct(accel[i], accel[i]);
+        if (a2 > maxA2) maxA2 = a2;
+    }
+    return sqrtf(maxA2);
 }
 
 void Simulation::rk4Step(float dt) {
@@ -119,16 +134,54 @@ void Simulation::step(float dt) {
     float simDt = dt * timeScale;
     if (simDt <= 0.0f) return;
 
-    // Sub-step for stability
-    constexpr float MAX_STEP = 0.005f;
-    float remaining = simDt;
-    while (remaining > 0.0f) {
-        float h = fminf(remaining, MAX_STEP);
-        rk4Step(h);
-        remaining -= h;
+    int n = starCount;
+
+    // Compute adaptive timestep from current accelerations.
+    // We want: dt <= eta * sqrt(softening / a_max)
+    // This ensures that no star moves an unphysical distance in one step.
+    constexpr float MAX_STEP  = 0.01f;   // absolute upper bound
+    constexpr float MIN_STEP  = 1e-5f;   // prevent infinite loops
+    constexpr float ETA       = 0.2f;    // Courant-like safety factor
+
+    float h = MAX_STEP;
+    if (n > 0) {
+        State s0;
+        for (int i = 0; i < n; i++) {
+            s0.pos[i] = stars[i].pos;
+            s0.vel[i] = stars[i].vel;
+        }
+        float aMax = maxAcceleration(s0, n);
+        if (aMax > 1e-6f) {
+            // Dynamical timescale criterion: h ~ eta * sqrt(eps / a_max)
+            float hDyn = ETA * sqrtf(softening / aMax);
+            h = fminf(h, hDyn);
+        }
+        h = fmaxf(h, MIN_STEP);
     }
 
-    // Push trails
+    float remaining = simDt;
+    while (remaining > 0.0f) {
+        float step = fminf(remaining, h);
+        rk4Step(step);
+        remaining -= step;
+
+        // Re-evaluate adaptive step after each sub-step since
+        // stars may have moved closer or farther apart.
+        if (remaining > 0.0f && n > 0) {
+            State s0;
+            for (int i = 0; i < n; i++) {
+                s0.pos[i] = stars[i].pos;
+                s0.vel[i] = stars[i].vel;
+            }
+            float aMax = maxAcceleration(s0, n);
+            if (aMax > 1e-6f) {
+                float hDyn = ETA * sqrtf(softening / aMax);
+                h = fmaxf(fminf(hDyn, MAX_STEP), MIN_STEP);
+            }
+        }
+    }
+
+    // Push trails (once per frame, not per sub-step)
     for (int i = 0; i < starCount; i++) {
         if (stars[i].active) stars[i].pushTrail();
     }
