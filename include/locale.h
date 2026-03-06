@@ -85,6 +85,32 @@ inline const Language LANGUAGES[] = {
             /*OutsideSpawnArea*/  "Outside spawn area",
         }
     },
+    {
+    "es", "Español", "es.png",
+        {
+            /*StarProperties*/   "Propiedades de la estrella",
+            /*MassSun*/          "Masa (masas solares)",
+            /*SimSpeed*/         "Velocidad de simulación",
+            /*Play*/             "Iniciar",
+            /*Pause*/            "Pausar",
+            /*Clear*/            "Limpiar",
+            /*StarsCount*/       "Estrellas: %d / %d",
+            /*TouchDragHint*/    "Toca y arrastra para colocar una estrella",
+            /*ControlsHint*/     "Pellizca para zoom - 3 dedos para mover",
+            /*BackToApp*/        "Volver a la vista general",
+            /*HRDiagram*/        "Diagrama H-R",
+            /*Hot*/              "Caliente",
+            /*Cool*/             "Frío",
+            /*ZoomIn*/           "+",
+            /*ZoomOut*/          "-",
+            /*Zoom*/             "Zoom",
+            /*Temperature*/      "Temperatura",
+            /*Bright*/           "Brillante",
+            /*Dim*/              "Tenue",
+            /*Luminosity*/       "Luminosidad",
+            /*OutsideSpawnArea*/ "Fuera del área permitida",
+        }
+    },
 };
 
 inline constexpr int LANGUAGE_COUNT = sizeof(LANGUAGES) / sizeof(LANGUAGES[0]);
