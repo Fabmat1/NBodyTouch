@@ -408,54 +408,108 @@ static Vector2 hrToPixel(const Rectangle &r, float teff, float lum) {
     xFrac = std::clamp(xFrac, 0.0f, 1.0f);
     yFrac = std::clamp(yFrac, 0.0f, 1.0f);
 
-    float mx = r.width  * 0.07f;
-    float my = r.height * 0.058f;
+    float px = 12.0f;
+    float py = 12.0f;
 
-    float px = r.x + mx + xFrac * (r.width  - 2.0f * mx);
-    float py = r.y + my + yFrac * (r.height - 2.0f * my);
-    return {px, py};
+    return { r.x + px + xFrac * (r.width - 2.0f * px),
+             r.y + py + yFrac * (r.height - 2.0f * py) };
 }
 
 void UI::drawHRDiagram(float mass) const {
     float s = scale();
 
-    DrawRectangleRounded(hrRect, 0.06f, 8, Color{8, 8, 16, 230});
-    DrawRectangleRoundedLinesEx(hrRect, 0.06f, 8, 1.0f * s, Color{60, 65, 85, 200});
+    // The plot area is inset from hrRect; labels go in the surrounding space
+    float marginL = 15.0f * s;
+    float marginB = 12.0f * s;
+    float marginT = 6.0f * s;
+    float marginR = 6.0f * s;
 
+    Rectangle plotRect = {
+        hrRect.x + marginL,
+        hrRect.y + marginT,
+        hrRect.width - marginL - marginR,
+        hrRect.height - marginT - marginB
+    };
+
+    // Background box drawn around the PLOT area only
+    DrawRectangleRounded(plotRect, 0.06f, 8, Color{8, 8, 16, 230});
+    DrawRectangleRoundedLinesEx(plotRect, 0.06f, 8, 1.0f * s, Color{60, 65, 85, 200});
+
+    // Title above plot box
     float fs = 13.0f * s;
     const char *title = loc(LKey::HRDiagram);
-    drawText(title, hrRect.x + hrRect.width * 0.5f -
-             measureText(title, fs) * 0.5f, hrRect.y - fs - 4 * s, fs,
+    drawText(title, plotRect.x + plotRect.width * 0.5f -
+             measureText(title, fs) * 0.5f, plotRect.y - fs - 4 * s, fs,
              Color{140,145,170,255});
 
-    float labelFs = 11.0f * s;
-    drawText(loc(LKey::Hot), hrRect.x + 4 * s,
-             hrRect.y + hrRect.height + 4 * s, labelFs, Color{130,140,255,255});
-    drawText(loc(LKey::Cool),
-             hrRect.x + hrRect.width - measureText(loc(LKey::Cool), labelFs) - 4 * s,
-             hrRect.y + hrRect.height + 4 * s, labelFs, Color{255,140,80,255});
-    drawText("L", hrRect.x - 14 * s,
-             hrRect.y + hrRect.height * 0.5f - 5 * s, labelFs, Color{140,145,170,200});
+    // Helper: draw text rotated 90° CCW, centered at (cx, cy)
+    auto drawRotated = [&](const char *text, float cx, float cy, float fontSize, Color col) {
+        if (fontLoaded) {
+            Vector2 sz = MeasureTextEx(uiFont, text, fontSize, 1.0f);
+            Vector2 origin = { sz.x * 0.5f, fontSize * 0.5f };
+            DrawTextPro(uiFont, text, {cx, cy}, origin, -90.0f, fontSize, 1.0f, col);
+        } else {
+            int tw = MeasureText(text, (int)fontSize);
+            DrawText(text, (int)(cx - tw * 0.5f), (int)(cy - fontSize * 0.5f),
+                     (int)fontSize, col);
+        }
+    };
 
+    // === Left axis labels (rotated, outside plot box) ===
+    float lumFs = 11.0f * s;
+    float axisCX = hrRect.x + marginL * 0.35f;
+
+    drawRotated(loc(LKey::Bright), axisCX,
+                plotRect.y + plotRect.height * 0.10f,
+                lumFs, Color{200, 200, 140, 210});
+
+    drawRotated(loc(LKey::Luminosity), axisCX,
+                plotRect.y + plotRect.height * 0.50f,
+                lumFs, Color{140, 145, 170, 220});
+
+    drawRotated(loc(LKey::Dim), axisCX,
+                plotRect.y + plotRect.height * 0.90f,
+                lumFs, Color{140, 145, 170, 190});
+
+    // === Bottom axis labels (outside plot box) ===
+    float axisFs = 11.0f * s;
+    float bottomY = plotRect.y + plotRect.height + 4 * s;
+
+    drawText(loc(LKey::Hot), plotRect.x + 1 * s, bottomY,
+             axisFs, Color{130, 140, 255, 255});
+
+    const char *coolTxt = loc(LKey::Cool);
+    drawText(coolTxt,
+             plotRect.x + plotRect.width - measureText(coolTxt, axisFs) - 1 * s,
+             bottomY, axisFs, Color{255, 140, 80, 255});
+
+    const char *tempLabel = loc(LKey::Temperature);
+    int tempW = measureText(tempLabel, axisFs);
+    drawText(tempLabel,
+             plotRect.x + plotRect.width * 0.5f - tempW * 0.5f,
+             bottomY, axisFs, Color{140, 145, 170, 210});
+
+    // === Plot data points (inside plot box) ===
     float dotR = 3.0f * s;
     for (auto &pt : hrData) {
-        Vector2 p = hrToPixel(hrRect, pt.teff, pt.luminosity);
+        Vector2 p = hrToPixel(plotRect, pt.teff, pt.luminosity);
         Color col = temperatureToColor(pt.teff);
         col.a = 120;
         DrawCircle((int)p.x, (int)p.y, dotR, col);
     }
 
+    // === Current mass marker ===
     float r, l, t;
     stellarModel(mass, 0.0f, r, l, t);
 
-    Vector2 starPos = hrToPixel(hrRect, t, l);
+    Vector2 starPos = hrToPixel(plotRect, t, l);
     Color starCol = temperatureToColor(t);
 
     DrawCircle((int)starPos.x, (int)starPos.y, 12 * s,
                Color{starCol.r, starCol.g, starCol.b, 40});
     DrawCircle((int)starPos.x, (int)starPos.y, 7 * s, starCol);
     DrawCircleLines((int)starPos.x, (int)starPos.y, (int)(9 * s),
-                    Color{255,255,255,200});
+                    Color{255, 255, 255, 200});
 }
 
 // ── Zoom controls — bottom-center panel ────────────────────────

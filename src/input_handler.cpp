@@ -1,14 +1,24 @@
+// src/input_handler.cpp
+
 #include "input_handler.h"
 #include "ui.h"
 #include "raymath.h"
 #include "compat.h"
+#include <cmath>
 
-static Vector3 screenToWorldPlane(Vector2 screenPos, Camera3D cam) {
+// Returns true if the ray hits the y=0 plane at a reasonable distance
+static bool screenToWorldPlane(Vector2 screenPos, Camera3D cam, Vector3 &outWorld) {
     Ray ray = GetScreenToWorldRay(screenPos, cam);
-    if (fabsf(ray.direction.y) < 1e-6f) return {0, 0, 0};
+    if (fabsf(ray.direction.y) < 1e-6f) return false;
     float t = -ray.position.y / ray.direction.y;
-    if (t < 0) t = 0;
-    return Vector3Add(ray.position, Vector3Scale(ray.direction, t));
+    if (t < 0.0f) return false;
+
+    outWorld = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
+
+    // Reject if the hit point is unreasonably far (> 500 units from origin)
+    if (fabsf(outWorld.x) > 500.0f || fabsf(outWorld.z) > 500.0f) return false;
+
+    return true;
 }
 
 static void panCamera(Renderer &renderer, Vector2 screenDelta) {
@@ -29,7 +39,28 @@ static void panCamera(Renderer &renderer, Vector2 screenDelta) {
     renderer.camera.target   = Vector3Add(renderer.camera.target, worldDelta);
 }
 
-void InputHandler::handlePinchZoom(Renderer &renderer) {
+static void orbitCamera(Renderer &renderer, Vector2 delta) {
+    Vector3 offset = Vector3Subtract(renderer.camera.position, renderer.camera.target);
+
+    Matrix rotY = MatrixRotateY(-delta.x * 0.005f);
+    offset = Vector3Transform(offset, rotY);
+
+    Vector3 right = Vector3CrossProduct(Vector3Normalize(offset), renderer.camera.up);
+    Matrix rotP   = MatrixRotate(right, -delta.y * 0.005f);
+    Vector3 newOffset = Vector3Transform(offset, rotP);
+
+    // Prevent flipping past poles: reject if the new offset is nearly
+    // parallel to the up vector
+    float dot = fabsf(Vector3DotProduct(Vector3Normalize(newOffset), renderer.camera.up));
+    if (dot < 0.98f) {
+        offset = newOffset;
+    }
+
+    renderer.camera.position = Vector3Add(renderer.camera.target, offset);
+}
+
+void InputHandler::handlePinchZoomAndRotate(Renderer &renderer) {
+    // Mouse wheel zoom
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) {
         renderer.zoomCamera(wheel * 3.0f);
@@ -40,29 +71,56 @@ void InputHandler::handlePinchZoom(Renderer &renderer) {
         Vector2 t1 = GetTouchPosition(1);
         float dist = Vector2Distance(t0, t1);
 
+        Vector2 center = { (t0.x + t1.x) * 0.5f, (t0.y + t1.y) * 0.5f };
+        float angle = atan2f(t1.y - t0.y, t1.x - t0.x);
+
         if (prevPinchDist > 0.0f) {
-            float delta = (dist - prevPinchDist) * 0.08f;
-            renderer.zoomCamera(delta);
+            // Pinch zoom
+            float zoomDelta = (dist - prevPinchDist) * 0.08f;
+            renderer.zoomCamera(zoomDelta);
+
+            // Two-finger rotation
+            if (twoFingerRotating) {
+                float angleDelta = angle - prevTwoFingerAngle;
+                // Normalize angle delta to [-PI, PI]
+                while (angleDelta > PI) angleDelta -= 2.0f * PI;
+                while (angleDelta < -PI) angleDelta += 2.0f * PI;
+
+                // Rotate around the target's vertical axis
+                Vector3 offset = Vector3Subtract(renderer.camera.position, renderer.camera.target);
+                Matrix rotY = MatrixRotateY(-angleDelta);
+                offset = Vector3Transform(offset, rotY);
+                renderer.camera.position = Vector3Add(renderer.camera.target, offset);
+            }
+
+            // Two-finger drag for pitch (vertical component of center movement)
+            Vector2 centerDelta = { center.x - prevTwoFingerCenter.x,
+                                    center.y - prevTwoFingerCenter.y };
+            if (fabsf(centerDelta.y) > 1.0f) {
+                orbitCamera(renderer, {0.0f, centerDelta.y});
+            }
         }
+
         prevPinchDist = dist;
+        prevTwoFingerAngle = angle;
+        prevTwoFingerCenter = center;
+        twoFingerRotating = true;
     } else {
         prevPinchDist = 0.0f;
+        twoFingerRotating = false;
     }
 
-    // Right/middle drag orbit
-    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
-        IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+    // Right-click drag: orbit
+    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
         Vector2 delta = GetMouseDelta();
-        Vector3 offset = Vector3Subtract(renderer.camera.position, renderer.camera.target);
+        orbitCamera(renderer, delta);
+    }
+}
 
-        Matrix rotY = MatrixRotateY(-delta.x * 0.005f);
-        offset = Vector3Transform(offset, rotY);
-
-        Vector3 right = Vector3CrossProduct(Vector3Normalize(offset), renderer.camera.up);
-        Matrix rotP   = MatrixRotate(right, -delta.y * 0.005f);
-        offset = Vector3Transform(offset, rotP);
-
-        renderer.camera.position = Vector3Add(renderer.camera.target, offset);
+void InputHandler::handleMiddleMousePan(Renderer &renderer) {
+    if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+        Vector2 delta = GetMouseDelta();
+        panCamera(renderer, delta);
     }
 }
 
@@ -114,26 +172,49 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
     Vector2 mouse = GetMousePosition();
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui.isOverUI(mouse)) {
+        Vector3 worldPos;
+        bool hitPlane = screenToWorldPlane(mouse, renderer.camera, worldPos);
+
         dragging = true;
         dragScreenStart = mouse;
-        dragStart = screenToWorldPlane(mouse, renderer.camera);
-        dragEnd   = dragStart;
+        dragValid = hitPlane;
+
+        if (hitPlane) {
+            dragStart = worldPos;
+            dragEnd   = dragStart;
+        }
     }
 
-    if (dragging) {
-        dragEnd = screenToWorldPlane(GetMousePosition(), renderer.camera);
+    if (dragging && dragValid) {
+        Vector3 worldPos;
+        if (screenToWorldPlane(GetMousePosition(), renderer.camera, worldPos)) {
+            dragEnd = worldPos;
+        }
     }
 
     if (dragging && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         dragging = false;
-        Vector3 vel = Vector3Scale(Vector3Subtract(dragStart, dragEnd), 3.0f);
-        sim.addStar(dragStart, vel, sliderMass, 0.0f);
+        if (dragValid) {
+            Vector3 vel = Vector3Scale(Vector3Subtract(dragStart, dragEnd), 3.0f);
+            sim.addStar(dragStart, vel, sliderMass, 0.0f);
+        } else {
+            // Show invalid spawn indicator
+            invalidSpawnTimer = invalidSpawnDuration;
+            invalidScreenPos  = dragScreenStart;
+        }
     }
 }
 
 void InputHandler::update(Simulation &sim, Renderer &renderer, const UI &ui, float dt) {
+    // Tick down invalid spawn indicator
+    if (invalidSpawnTimer > 0.0f) {
+        invalidSpawnTimer -= dt;
+        if (invalidSpawnTimer < 0.0f) invalidSpawnTimer = 0.0f;
+    }
+
     handleThreeFingerPan(renderer);
-    handlePinchZoom(renderer);
+    handlePinchZoomAndRotate(renderer);
+    handleMiddleMousePan(renderer);
     handleStarPlacement(sim, renderer, ui);
 
     // UI zoom buttons

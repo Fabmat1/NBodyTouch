@@ -41,6 +41,25 @@ void App::run() {
                 EndMode3D();
             }
 
+            // Invalid spawn indicator: red X that fades out
+            if (input.showInvalidSpawn()) {
+                float alpha = input.invalidSpawnAlpha();
+                unsigned char a = (unsigned char)(alpha * 220);
+                Color col = { 255, 60, 60, a };
+                Vector2 p = input.invalidSpawnPos();
+                float sz = 20.0f;
+
+                DrawLineEx({p.x - sz, p.y - sz}, {p.x + sz, p.y + sz}, 5.0f, col);
+                DrawLineEx({p.x + sz, p.y - sz}, {p.x - sz, p.y + sz}, 5.0f, col);
+
+                // Tooltip text using UI font and locale
+                Color textCol = { 255, 180, 180, a };
+                const char *msg = ui.loc(LKey::OutsideSpawnArea);
+                float fs = 16.0f;
+                int tw = ui.measureText(msg, fs);
+                ui.drawText(msg, p.x - tw * 0.5f, p.y + sz * 1.5f, fs, textCol);
+            }
+
             ui.draw(sim, input.sliderMass);
 
             if (IsKeyPressed(KEY_SPACE))

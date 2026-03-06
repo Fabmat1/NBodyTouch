@@ -37,7 +37,9 @@ public:
 
     bool        isOverUI(Vector2 pos) const;
     const char *loc(LKey key) const;
-
+    void drawText(const char *text, float x, float y, float size, Color col) const;
+    int  measureText(const char *text, float size) const;
+    
 private:
     int sw = 0, sh = 0;
     float scale() const;
@@ -75,6 +77,4 @@ private:
     void drawZoomControls() const;
     void drawLanguageSelector() const;
     void drawPanelBackgrounds() const;
-    void drawText(const char *text, float x, float y, float size, Color col) const;
-    int  measureText(const char *text, float size) const;
 };
