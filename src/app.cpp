@@ -2,8 +2,17 @@
 #include "raylib.h"
 
 void App::run() {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_FULLSCREEN_MODE);
+
+#ifdef PLATFORM_ANDROID
+    // On Android, use 0,0 to get full screen
+    InitWindow(0, 0, "N-Body Dynamics");
+    screenW = GetScreenWidth();
+    screenH = GetScreenHeight();
+#else
     InitWindow(screenW, screenH, "N-Body Dynamics — Astrophysics Explorer");
+#endif
+
     SetTargetFPS(60);
 
     renderer.init(screenW, screenH);
