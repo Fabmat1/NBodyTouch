@@ -1,7 +1,7 @@
 #pragma once
 #include "raylib.h"
 #include "simulation.h"
-#include "locale.h"
+#include "localization.h"
 #include <vector>
 
 struct UISlider {
