@@ -17,6 +17,8 @@ public:
     bool    showInvalidSpawn() const { return invalidSpawnTimer > 0.0f; }
     Vector2 invalidSpawnPos()  const { return invalidScreenPos; }
     float   invalidSpawnAlpha() const { return invalidSpawnTimer / invalidSpawnDuration; }
+    
+    bool didManualPan() const { return manualPanThisFrame; }
 
 private:
     bool    dragging        = false;
@@ -38,6 +40,7 @@ private:
     Vector2 prevTwoFingerCenter = {0};
 
     float   multiTouchCooldown  = 0.0f;
+    bool manualPanThisFrame = false;
 
     void handlePinchZoomAndRotate(Renderer &renderer);
     void handleThreeFingerPan(Renderer &renderer);

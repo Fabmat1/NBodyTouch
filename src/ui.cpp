@@ -235,8 +235,8 @@ void UI::layout() {
 
     btnPause = { boxX + bPad,            boxY + boxH - btnH - bPad, btnW, btnH };
     btnReset = { boxX + 2 * bPad + btnW, boxY + boxH - btnH - bPad, btnW, btnH };
-
-    float zpW = 160.0f * s;
+    
+    float zpW = 200.0f * s;
     float zpH = 64.0f * s;
     float zpX = (float)sw * 0.5f - zpW * 0.5f;
     float zpY = (float)sh - zpH - 10.0f * s;
@@ -244,12 +244,13 @@ void UI::layout() {
 
     float zbW = 48.0f * s;
     float zbH = 28.0f * s;
-    float zbGap = 12.0f * s;
-    float zbTotalW = 2 * zbW + zbGap;
+    float zbGap = 8.0f * s;
+    float zbTotalW = 3 * zbW + 2 * zbGap;
     float zbX = zpX + (zpW - zbTotalW) * 0.5f;
     float zbY = zpY + zpH - zbH - 6.0f * s;
-    btnZoomIn  = { zbX, zbY, zbW, zbH };
-    btnZoomOut = { zbX + zbW + zbGap, zbY, zbW, zbH };
+    btnZoomIn   = { zbX,                       zbY, zbW, zbH };
+    btnTrackCOM = { zbX +     (zbW + zbGap),   zbY, zbW, zbH };
+    btnZoomOut  = { zbX + 2 * (zbW + zbGap),   zbY, zbW, zbH };
 }
 
 // ── UI init ────────────────────────────────────────────────────
@@ -521,6 +522,7 @@ void UI::drawZoomControls() const {
 
     float btnFs = 20.0f * s;
 
+    // Zoom In
     {
         bool over = CheckCollisionPointRec(pointer, btnZoomIn) && Pointer::down();
         Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
@@ -532,6 +534,28 @@ void UI::drawZoomControls() const {
                  btnZoomIn.y + btnZoomIn.height * 0.5f - btnFs * 0.5f, btnFs, WHITE);
     }
 
+    // Track Centre of Mass  (crosshair icon: ⊕)
+    {
+        bool active = trackingCOM;
+        bool over   = CheckCollisionPointRec(pointer, btnTrackCOM) && Pointer::down();
+        Color bg    = active ? Color{40, 90, 60, 255}
+                             : (over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240});
+        Color border = active ? Color{80, 200, 120, 220} : Color{90, 95, 130, 200};
+        DrawRectangleRounded(btnTrackCOM, 0.3f, 8, bg);
+        DrawRectangleRoundedLinesEx(btnTrackCOM, 0.3f, 8, 1.5f * s, border);
+
+        // Draw a simple crosshair/target symbol
+        float cx = btnTrackCOM.x + btnTrackCOM.width  * 0.5f;
+        float cy = btnTrackCOM.y + btnTrackCOM.height * 0.5f;
+        float r  = btnTrackCOM.height * 0.28f;
+        float arm = r * 0.55f;
+        Color ic = active ? Color{120, 255, 160, 255} : Color{200, 200, 220, 220};
+        DrawCircleLines((int)cx, (int)cy, r, ic);
+        DrawLineEx({cx - r - arm, cy}, {cx + r + arm, cy}, 1.5f * s, ic);
+        DrawLineEx({cx, cy - r - arm}, {cx, cy + r + arm}, 1.5f * s, ic);
+    }
+
+    // Zoom Out
     {
         bool over = CheckCollisionPointRec(pointer, btnZoomOut) && Pointer::down();
         Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
@@ -700,6 +724,7 @@ bool UI::isOverUI(Vector2 pos) const {
     if (CheckCollisionPointRec(pos, rightPanel))      return true;
     if (CheckCollisionPointRec(pos, bottomLeftPanel))  return true;
     if (CheckCollisionPointRec(pos, zoomPanel))        return true;
+    if (CheckCollisionPointRec(pos, btnTrackCOM))      return true;
     for (int i = 0; i < LANGUAGE_COUNT; i++) {
         if (CheckCollisionPointRec(pos, flagRects[i])) return true;
     }

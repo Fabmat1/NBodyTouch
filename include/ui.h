@@ -39,6 +39,10 @@ public:
     const char *loc(LKey key) const;
     void drawText(const char *text, float x, float y, float size, Color col) const;
     int  measureText(const char *text, float size) const;
+
+    bool  trackingCOM     = false;   // centre-of-mass follow mode
+    float trackBlend      = 0.0f;    // 0=off, 1=fully tracking (smooth transition)
+    Rectangle btnTrackCOM     = {};
     
 private:
     int sw = 0, sh = 0;

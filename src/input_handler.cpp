@@ -13,7 +13,7 @@ static bool screenToWorldPlane(Vector2 screenPos, Camera3D cam, Vector3 &outWorl
     if (t < 0.0f) return false;
 
     outWorld = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
-    if (fabsf(outWorld.x) > 500.0f || fabsf(outWorld.z) > 500.0f) return false;
+    if (fabsf(outWorld.x) > 100000.0f || fabsf(outWorld.z) > 100000.0f) return false;
     return true;
 }
 
@@ -124,6 +124,7 @@ void InputHandler::handleMiddleMousePan(Renderer &renderer) {
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
         Vector2 delta = GetMouseDelta();
         panCamera(renderer, delta);
+        manualPanThisFrame = true;
     }
 }
 
@@ -138,11 +139,11 @@ void InputHandler::handleThreeFingerPan(Renderer &renderer) {
         c.x /= 3.0f;
         c.y /= 3.0f;
 
-        // Same pattern: only pan from real finger movement
         if (threePanning && Pointer::freshData()) {
             Vector2 screenDelta = { c.x - threePanPrev.x, c.y - threePanPrev.y };
             if (Vector2Length(screenDelta) < 100.0f) {
                 panCamera(renderer, screenDelta);
+                manualPanThisFrame = true;
             }
         }
 
@@ -158,6 +159,7 @@ void InputHandler::handleThreeFingerPan(Renderer &renderer) {
         if (threePanning) {
             Vector2 screenDelta = GetMouseDelta();
             panCamera(renderer, screenDelta);
+            manualPanThisFrame = true;
         }
         threePanning = true;
         return;
@@ -222,6 +224,8 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
 }
 
 void InputHandler::update(Simulation &sim, Renderer &renderer, const UI &ui, float dt) {
+    manualPanThisFrame = false;   // ← reset at top of frame
+
     if (invalidSpawnTimer > 0.0f) {
         invalidSpawnTimer -= dt;
         if (invalidSpawnTimer < 0.0f) invalidSpawnTimer = 0.0f;
