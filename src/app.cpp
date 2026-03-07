@@ -1,4 +1,5 @@
 #include "app.h"
+#include "pointer.h"
 #include "raylib.h"
 
 
@@ -11,7 +12,6 @@ void App::run() {
 #else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(screenW, screenH, "N-Body Dynamics — Astrophysics Explorer");
-    // Pick up actual size (matters for HiDPI/4K)
     screenW = GetScreenWidth();
     screenH = GetScreenHeight();
 #endif
@@ -24,6 +24,7 @@ void App::run() {
 
     while (!WindowShouldClose() && !ui.quitRequested) {
         float dt = GetFrameTime();
+        Pointer::beginFrame();
 
         ui.update(sim, input.sliderMass);
         input.update(sim, renderer, ui, dt);
@@ -37,23 +38,25 @@ void App::run() {
 
             renderer.drawScene(sim);
 
+            // Drag indicator — only after the user has moved enough to
+            // distinguish a deliberate drag from a gesture-start touch
             if (input.isDragging()) {
-                BeginMode3D(renderer.camera);
-                    Vector3 from = input.getDragStart();
-                    Vector3 to   = input.getDragEnd();
-                    Vector3 vel  = Vector3Scale(Vector3Subtract(from, to), 3.0f);
-                    float   len  = Vector3Length(vel);
-                    if (len > 0.1f) {
+                Vector3 from = input.getDragStart();
+                Vector3 to   = input.getDragEnd();
+                Vector3 vel  = Vector3Scale(Vector3Subtract(from, to), 3.0f);
+                float   len  = Vector3Length(vel);
+
+                if (len > 0.1f) {
+                    BeginMode3D(renderer.camera);
                         Vector3 tip = Vector3Add(from, Vector3Scale(
                             Vector3Normalize(vel), fminf(len, 15.0f)));
                         DrawLine3D(from, tip, YELLOW);
                         DrawSphere(tip, 0.15f, YELLOW);
-                    }
-                    DrawSphere(from, 0.3f, WHITE);
-                EndMode3D();
+                        DrawSphere(from, 0.3f, WHITE);
+                    EndMode3D();
+                }
             }
 
-            // Invalid spawn indicator: red X that fades out
             if (input.showInvalidSpawn()) {
                 float alpha = input.invalidSpawnAlpha();
                 unsigned char a = (unsigned char)(alpha * 220);
@@ -64,7 +67,6 @@ void App::run() {
                 DrawLineEx({p.x - sz, p.y - sz}, {p.x + sz, p.y + sz}, 5.0f, col);
                 DrawLineEx({p.x + sz, p.y - sz}, {p.x - sz, p.y + sz}, 5.0f, col);
 
-                // Tooltip text using UI font and locale
                 Color textCol = { 255, 180, 180, a };
                 const char *msg = ui.loc(LKey::OutsideSpawnArea);
                 float fs = 16.0f;

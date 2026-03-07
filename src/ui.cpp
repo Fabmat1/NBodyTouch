@@ -8,14 +8,13 @@
 #include "assets.h"
 #include "localization.h"
 #include "compat.h"
+#include "pointer.h"
 
 // ── Helpers ────────────────────────────────────────────────────
 
 float UI::scale() const {
     float s = fminf((float)sw / 1920.0f, (float)sh / 1080.0f);
 #ifdef PLATFORM_ANDROID
-    // Phone screens are physically small but high-res,
-    // scale UI up so it's usable with fingers
     s *= 2.2f;
 #endif
     return s;
@@ -88,22 +87,19 @@ void UISlider::draw(Font font, float fontSize) const {
     }
 }
 
-// ── UISlider ───────────────────────────────────────────────────
-
 bool UISlider::update() {
-    Vector2 mouse = GetMousePosition();
-    bool changed  = false;
+    Vector2 pointer = Pointer::position();
+    bool changed    = false;
 
     float padX = bounds.height * 0.3f;
     float padY = bounds.height * 0.45f;
     Rectangle hitArea = { bounds.x - padX, bounds.y - padY,
                           bounds.width + 2 * padX, bounds.height + 2 * padY };
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        CheckCollisionPointRec(mouse, hitArea)) {
+    if (Pointer::pressed() && CheckCollisionPointRec(pointer, hitArea)) {
         dragging = true;
     }
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+    if (Pointer::released()) {
         dragging = false;
     }
 
@@ -123,7 +119,6 @@ bool UISlider::update() {
             newVal = minVal + frac * (maxVal - minVal);
         }
 
-        // Snap to 0.25 steps when the slider range suggests it's the time slider
         if (!useLog && snapStep > 0.0f) {
             newVal = roundf(newVal / snapStep) * snapStep;
         }
@@ -132,11 +127,13 @@ bool UISlider::update() {
         if (newVal != value) { value = newVal; changed = true; }
     };
 
-    if (dragging) applyPos(mouse);
-
-    for (int t = 0; t < GetTouchPointCount(); t++) {
-        Vector2 tp = GetTouchPosition(t);
-        if (CheckCollisionPointRec(tp, hitArea)) applyPos(tp);
+    if (dragging) {
+        applyPos(pointer);
+    } else {
+        for (int t = 0; t < Pointer::touchCount(); t++) {
+            Vector2 tp = Pointer::touchPosition(t);
+            if (CheckCollisionPointRec(tp, hitArea)) applyPos(tp);
+        }
     }
 
     return changed;
@@ -175,7 +172,6 @@ void UI::loadHRData(const char *path) {
 // ── Flag loading ───────────────────────────────────────────────
 
 void UI::loadFlags() {
-    // src/ui.cpp — inside loadFlags() loop
     for (int i = 0; i < LANGUAGE_COUNT; i++) {
         char rel[256];
         snprintf(rel, sizeof(rel), "assets/locale_flags/%s", LANGUAGES[i].flagFile);
@@ -199,12 +195,10 @@ void UI::loadFlags() {
 void UI::layout() {
     float s = scale();
 
-    // ── Right panel ───────────────────────────────────
     float panelW = 250.0f * s;
     float panelX = (float)sw - panelW;
     rightPanel = { panelX, 0, panelW, (float)sh };
 
-    // Language flags
     float flagW   = 36.0f * s;
     float flagH   = 24.0f * s;
     float flagGap = 8.0f * s;
@@ -224,10 +218,8 @@ void UI::layout() {
 
     hrRect = { panelX + 10.0f * s, 155.0f * s, panelW - 20.0f * s, 260.0f * s };
 
-    // Quit button at bottom of right panel
     btnQuit = { panelX + 5.0f * s, (float)sh - 46.0f * s, panelW - 10.0f * s, 36.0f * s };
 
-    // ── Bottom-left panel ─────────────────────────────
     float boxW = 240.0f * s;
     float boxH = 120.0f * s;
     float boxX = 10.0f * s;
@@ -244,7 +236,6 @@ void UI::layout() {
     btnPause = { boxX + bPad,            boxY + boxH - btnH - bPad, btnW, btnH };
     btnReset = { boxX + 2 * bPad + btnW, boxY + boxH - btnH - bPad, btnW, btnH };
 
-    // ── Zoom panel — bottom-center ────────────────────
     float zpW = 160.0f * s;
     float zpH = 64.0f * s;
     float zpX = (float)sw * 0.5f - zpW * 0.5f;
@@ -267,15 +258,14 @@ void UI::init(int screenW, int screenH) {
     sw = screenW;
     sh = screenH;
 
-    // Build codepoint set: ASCII + Latin Extended + German/European + common symbols
     int codepoints[1024];
     int cpCount = 0;
-    for (int i = 32;   i <= 126;  i++) codepoints[cpCount++] = i;   // ASCII
-    for (int i = 160;  i <= 591;  i++) codepoints[cpCount++] = i;   // Latin-1 Supp + Latin Extended-A/B
-    for (int i = 8192; i <= 8303; i++) codepoints[cpCount++] = i;   // General Punctuation (—, –, …)
-    for (int i = 8320; i <= 8399; i++) codepoints[cpCount++] = i;   // Superscripts/Subscripts
-    codepoints[cpCount++] = 0x00D7;  // ×
-    codepoints[cpCount++] = 0x2609;  // ☉ (sun symbol)
+    for (int i = 32;   i <= 126;  i++) codepoints[cpCount++] = i;
+    for (int i = 160;  i <= 591;  i++) codepoints[cpCount++] = i;
+    for (int i = 8192; i <= 8303; i++) codepoints[cpCount++] = i;
+    for (int i = 8320; i <= 8399; i++) codepoints[cpCount++] = i;
+    codepoints[cpCount++] = 0x00D7;
+    codepoints[cpCount++] = 0x2609;
 
     const char *fontRelPaths[] = {
         "assets/fonts/Inter_18pt-Medium.ttf",
@@ -283,7 +273,6 @@ void UI::init(int screenW, int screenH) {
         "assets/fonts/Inter_24pt-Bold.ttf",
         "assets/fonts/ui_font.ttf",
     };
-    // src/ui.cpp — font loading block in UI::init()
     fontLoaded = false;
     for (auto &rel : fontRelPaths) {
         const char *path = AssetPath(rel);
@@ -335,10 +324,10 @@ void UI::shutdown() {
 // ── Language selector ──────────────────────────────────────────
 
 void UI::updateLanguageSelector() {
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        Vector2 mouse = GetMousePosition();
+    if (Pointer::pressed()) {
+        Vector2 pos = Pointer::position();
         for (int i = 0; i < LANGUAGE_COUNT; i++) {
-            if (CheckCollisionPointRec(mouse, flagRects[i])) {
+            if (CheckCollisionPointRec(pos, flagRects[i])) {
                 if (i != currentLang) {
                     currentLang = i;
                     layout();
@@ -346,10 +335,8 @@ void UI::updateLanguageSelector() {
                 return;
             }
         }
-    }
-    if (GetTouchPointCount() > 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        for (int t = 0; t < GetTouchPointCount(); t++) {
-            Vector2 tp = GetTouchPosition(t);
+        for (int t = 0; t < Pointer::touchCount(); t++) {
+            Vector2 tp = Pointer::touchPosition(t);
             for (int i = 0; i < LANGUAGE_COUNT; i++) {
                 if (CheckCollisionPointRec(tp, flagRects[i])) {
                     if (i != currentLang) {
@@ -430,7 +417,6 @@ static Vector2 hrToPixel(const Rectangle &r, float teff, float lum) {
 void UI::drawHRDiagram(float mass) const {
     float s = scale();
 
-    // The plot area is inset from hrRect; labels go in the surrounding space
     float marginL = 15.0f * s;
     float marginB = 12.0f * s;
     float marginT = 6.0f * s;
@@ -443,18 +429,15 @@ void UI::drawHRDiagram(float mass) const {
         hrRect.height - marginT - marginB
     };
 
-    // Background box drawn around the PLOT area only
     DrawRectangleRounded(plotRect, 0.06f, 8, Color{8, 8, 16, 230});
     DrawRectangleRoundedLinesEx(plotRect, 0.06f, 8, 1.0f * s, Color{60, 65, 85, 200});
 
-    // Title above plot box
     float fs = 13.0f * s;
     const char *title = loc(LKey::HRDiagram);
     drawText(title, plotRect.x + plotRect.width * 0.5f -
              measureText(title, fs) * 0.5f, plotRect.y - fs - 4 * s, fs,
              Color{140,145,170,255});
 
-    // Helper: draw text rotated 90° CCW, centered at (cx, cy)
     auto drawRotated = [&](const char *text, float cx, float cy, float fontSize, Color col) {
         if (fontLoaded) {
             Vector2 sz = MeasureTextEx(uiFont, text, fontSize, 1.0f);
@@ -467,7 +450,6 @@ void UI::drawHRDiagram(float mass) const {
         }
     };
 
-    // === Left axis labels (rotated, outside plot box) ===
     float lumFs = 11.0f * s;
     float axisCX = hrRect.x + marginL * 0.35f;
 
@@ -483,7 +465,6 @@ void UI::drawHRDiagram(float mass) const {
                 plotRect.y + plotRect.height * 0.90f,
                 lumFs, Color{140, 145, 170, 190});
 
-    // === Bottom axis labels (outside plot box) ===
     float axisFs = 11.0f * s;
     float bottomY = plotRect.y + plotRect.height + 4 * s;
 
@@ -501,7 +482,6 @@ void UI::drawHRDiagram(float mass) const {
              plotRect.x + plotRect.width * 0.5f - tempW * 0.5f,
              bottomY, axisFs, Color{140, 145, 170, 210});
 
-    // === Plot data points (inside plot box) ===
     float dotR = 3.0f * s;
     for (auto &pt : hrData) {
         Vector2 p = hrToPixel(plotRect, pt.teff, pt.luminosity);
@@ -510,7 +490,6 @@ void UI::drawHRDiagram(float mass) const {
         DrawCircle((int)p.x, (int)p.y, dotR, col);
     }
 
-    // === Current mass marker ===
     float r, l, t;
     stellarModel(mass, 0.0f, r, l, t);
 
@@ -524,11 +503,11 @@ void UI::drawHRDiagram(float mass) const {
                     Color{255, 255, 255, 200});
 }
 
-// ── Zoom controls — bottom-center panel ────────────────────────
+// ── Zoom controls ──────────────────────────────────────────────
 
 void UI::drawZoomControls() const {
-    float s  = scale();
-    Vector2 mouse = GetMousePosition();
+    float s = scale();
+    Vector2 pointer = Pointer::position();
 
     float headerFs = 13.0f * s;
     drawText(loc(LKey::Zoom), zoomPanel.x + 8 * s, zoomPanel.y + 5 * s,
@@ -540,11 +519,10 @@ void UI::drawZoomControls() const {
     drawText(zoomBuf, zoomPanel.x + zoomPanel.width - ztw - 8 * s,
              zoomPanel.y + 5 * s, headerFs, WHITE);
 
-    // Buttons
     float btnFs = 20.0f * s;
 
     {
-        bool over = CheckCollisionPointRec(mouse, btnZoomIn);
+        bool over = CheckCollisionPointRec(pointer, btnZoomIn) && Pointer::down();
         Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
         DrawRectangleRounded(btnZoomIn, 0.3f, 8, bg);
         DrawRectangleRoundedLinesEx(btnZoomIn, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
@@ -555,7 +533,7 @@ void UI::drawZoomControls() const {
     }
 
     {
-        bool over = CheckCollisionPointRec(mouse, btnZoomOut);
+        bool over = CheckCollisionPointRec(pointer, btnZoomOut) && Pointer::down();
         Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
         DrawRectangleRounded(btnZoomOut, 0.3f, 8, bg);
         DrawRectangleRoundedLinesEx(btnZoomOut, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
@@ -566,14 +544,14 @@ void UI::drawZoomControls() const {
     }
 }
 
-// ── Time controls (draw only) ──────────────────────────────────
+// ── Time controls ──────────────────────────────────────────────
 
 void UI::drawTimeControls(const Simulation &sim) const {
     float s = scale();
-    Vector2 mouse = GetMousePosition();
+    Vector2 pointer = Pointer::position();
 
     {
-        bool over = CheckCollisionPointRec(mouse, btnPause);
+        bool over = CheckCollisionPointRec(pointer, btnPause) && Pointer::down();
         Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
         DrawRectangleRounded(btnPause, 0.3f, 8, bg);
         DrawRectangleRoundedLinesEx(btnPause, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
@@ -585,7 +563,7 @@ void UI::drawTimeControls(const Simulation &sim) const {
     }
 
     {
-        bool over = CheckCollisionPointRec(mouse, btnReset);
+        bool over = CheckCollisionPointRec(pointer, btnReset) && Pointer::down();
         Color bg = over ? Color{100, 45, 45, 255} : Color{55, 30, 30, 240};
         DrawRectangleRounded(btnReset, 0.3f, 8, bg);
         DrawRectangleRoundedLinesEx(btnReset, 0.3f, 8, 1.0f * s, Color{130, 80, 80, 200});
@@ -615,40 +593,37 @@ void UI::update(Simulation &sim, float &outMass) {
     massSlider.update();
 
     if (timeSlider.update()) {
-        sim.timeScale = timeSlider.value;  
+        sim.timeScale = timeSlider.value;
     }
 
-    // Zoom buttons (continuous while held)
-    Vector2 mouse = GetMousePosition();
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, btnZoomIn))  zoomRequest =  1.0f;
-        if (CheckCollisionPointRec(mouse, btnZoomOut)) zoomRequest = -1.0f;
+    if (Pointer::down()) {
+        Vector2 pos = Pointer::position();
+        if (CheckCollisionPointRec(pos, btnZoomIn))  zoomRequest =  1.0f;
+        if (CheckCollisionPointRec(pos, btnZoomOut)) zoomRequest = -1.0f;
     }
-    for (int t = 0; t < GetTouchPointCount(); t++) {
-        Vector2 tp = GetTouchPosition(t);
+    for (int t = 0; t < Pointer::touchCount(); t++) {
+        Vector2 tp = Pointer::touchPosition(t);
         if (CheckCollisionPointRec(tp, btnZoomIn))  zoomRequest =  1.0f;
         if (CheckCollisionPointRec(tp, btnZoomOut)) zoomRequest = -1.0f;
     }
 
-    // Pause / Clear
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, btnPause)) {
+    if (Pointer::pressed()) {
+        Vector2 pos = Pointer::position();
+        if (CheckCollisionPointRec(pos, btnPause)) {
             if (sim.timeScale > 0.001f) sim.timeScale = 0.0f;
             else sim.timeScale = timeSlider.value > 0.01f ? timeSlider.value : 1.0f;
         }
-        if (CheckCollisionPointRec(mouse, btnReset))
+        if (CheckCollisionPointRec(pos, btnReset))
             sim.clear();
     }
 
-    // Quit
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(mouse, btnQuit))
+    if (Pointer::pressed()) {
+        Vector2 pos = Pointer::position();
+        if (CheckCollisionPointRec(pos, btnQuit))
             quitRequested = true;
-    }
-    for (int t = 0; t < GetTouchPointCount(); t++) {
-        if (CheckCollisionPointRec(GetTouchPosition(t), btnQuit) &&
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            quitRequested = true;
+        for (int t = 0; t < Pointer::touchCount(); t++) {
+            if (CheckCollisionPointRec(Pointer::touchPosition(t), btnQuit))
+                quitRequested = true;
         }
     }
 
@@ -670,11 +645,10 @@ void UI::draw(const Simulation &sim, float mass) {
     massSlider.draw(uiFont, 14.0f * s);
     drawHRDiagram(mass);
 
-    // Star count — below HR diagram inside right panel
     {
         char buf[64];
         snprintf(buf, sizeof(buf), loc(LKey::StarsCount), sim.starCount, MAX_STARS);
-        float counterY = hrRect.y + hrRect.height + 22.0f * s;   // was 12.0f
+        float counterY = hrRect.y + hrRect.height + 22.0f * s;
         drawText(buf, rightPanel.x + 15 * s, counterY, 13 * s, Color{100,105,130,255});
     }
 
@@ -683,14 +657,12 @@ void UI::draw(const Simulation &sim, float mass) {
     timeSlider.draw(uiFont, 14.0f * s);
     drawTimeControls(sim);
 
-    // Help text
     drawText(loc(LKey::TouchDragHint), 12 * s, 12 * s, 16 * s, Color{160,165,185,200});
     drawText(loc(LKey::ControlsHint),  12 * s, 32 * s, 13 * s, Color{100,105,130,180});
 
-    // Quit button (visual)
     {
-        Vector2 mouse = GetMousePosition();
-        bool over = CheckCollisionPointRec(mouse, btnQuit);
+        Vector2 pointer = Pointer::position();
+        bool over = CheckCollisionPointRec(pointer, btnQuit) && Pointer::down();
         Color bg = over ? Color{70, 55, 55, 240} : Color{35, 30, 38, 220};
         DrawRectangleRounded(btnQuit, 0.3f, 8, bg);
         DrawRectangleRoundedLinesEx(btnQuit, 0.3f, 8, 1.0f * s, Color{100, 80, 90, 200});
@@ -709,6 +681,18 @@ void UI::draw(const Simulation &sim, float mass) {
                  cx, 30 * s, 13 * s, GREEN);
         drawText(TextFormat("Time scale: %.3f", sim.timeScale),
                  cx, 46 * s, 13 * s, GREEN);
+        // Touch diagnostics: raw vs filtered
+        drawText(TextFormat("RawTC:%d  RawTP:%.0f,%.0f  Mouse:%.0f,%.0f",
+                 GetTouchPointCount(),
+                 GetTouchPosition(0).x, GetTouchPosition(0).y,
+                 GetMousePosition().x, GetMousePosition().y),
+                 cx, 62 * s, 11 * s, GREEN);
+        drawText(TextFormat("CachedTC:%d  Ptr:%.0f,%.0f  Touch:%s  Down:%s",
+                 Pointer::touchCount(),
+                 Pointer::position().x, Pointer::position().y,
+                 Pointer::_usingTouch ? "Y" : "N",
+                 Pointer::down() ? "Y" : "N"),
+                 cx, 76 * s, 11 * s, GREEN);
     }
 }
 
