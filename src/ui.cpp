@@ -40,6 +40,51 @@ int UI::measureText(const char *text, float size) const {
     return MeasureText(text, (int)size);
 }
 
+void UI::drawTextWrapped(const char *text, Rectangle bounds,
+                         float fontSize, Color color) const {
+    float lineH  = fontSize * 1.4f;
+    float spaceW = (float)measureText(" ", fontSize);
+    float x = bounds.x;
+    float y = bounds.y;
+
+    const char *p = text;
+    char word[512];
+
+    while (*p) {
+        if (y + fontSize > bounds.y + bounds.height) break;
+
+        if (*p == '\n') {
+            x = bounds.x;
+            y += lineH;
+            p++;
+            continue;
+        }
+        if (*p == ' ') {
+            if (x > bounds.x) x += spaceW;
+            p++;
+            continue;
+        }
+
+        int wlen = 0;
+        while (p[wlen] && p[wlen] != ' ' && p[wlen] != '\n' && wlen < 510)
+            wlen++;
+        memcpy(word, p, wlen);
+        word[wlen] = '\0';
+        p += wlen;
+
+        float ww = (float)measureText(word, fontSize);
+
+        if (x + ww > bounds.x + bounds.width && x > bounds.x) {
+            x = bounds.x;
+            y += lineH;
+            if (y + fontSize > bounds.y + bounds.height) break;
+        }
+
+        drawText(word, x, y, fontSize, color);
+        x += ww;
+    }
+}
+
 // ── UISlider ───────────────────────────────────────────────────
 
 void UISlider::draw(Font font, float fontSize) const {
@@ -190,6 +235,35 @@ void UI::loadFlags() {
     }
 }
 
+// ── Intro image loading ────────────────────────────────────────
+
+void UI::loadIntroImages() {
+    static const char *paths[INTRO_IMAGE_COUNT] = {
+        "assets/intro/page1_touch_drag.png",
+        "assets/intro/page2_zoom.png",
+        "assets/intro/page2_pan.png",
+        "assets/intro/page3_speed.png",
+        "assets/intro/page4_zoom.png",
+        "assets/intro/page5_back.png",
+    };
+    for (int i = 0; i < INTRO_IMAGE_COUNT; i++) {
+        const char *fullPath = AssetPath(paths[i]);
+#ifndef PLATFORM_ANDROID
+        if (!FileExists(fullPath)) {
+            introImagesLoaded[i] = false;
+            continue;
+        }
+#endif
+        introImages[i] = LoadTexture(fullPath);
+        if (introImages[i].id != 0) {
+            SetTextureFilter(introImages[i], TEXTURE_FILTER_BILINEAR);
+            introImagesLoaded[i] = true;
+        } else {
+            introImagesLoaded[i] = false;
+        }
+    }
+}
+
 // ── Layout ─────────────────────────────────────────────────────
 
 void UI::layout() {
@@ -235,9 +309,10 @@ void UI::layout() {
 
     btnPause = { boxX + bPad,            boxY + boxH - btnH - bPad, btnW, btnH };
     btnReset = { boxX + 2 * bPad + btnW, boxY + boxH - btnH - bPad, btnW, btnH };
-    
+
+    // ── Zoom panel (taller to fit reset-camera button) ────────────────
     float zpW = 200.0f * s;
-    float zpH = 64.0f * s;
+    float zpH = 100.0f * s;
     float zpX = (float)sw * 0.5f - zpW * 0.5f;
     float zpY = (float)sh - zpH - 10.0f * s;
     zoomPanel = { zpX, zpY, zpW, zpH };
@@ -247,10 +322,84 @@ void UI::layout() {
     float zbGap = 8.0f * s;
     float zbTotalW = 3 * zbW + 2 * zbGap;
     float zbX = zpX + (zpW - zbTotalW) * 0.5f;
-    float zbY = zpY + zpH - zbH - 6.0f * s;
+    float zbY = zpY + 28.0f * s;
     btnZoomIn   = { zbX,                       zbY, zbW, zbH };
     btnTrackCOM = { zbX +     (zbW + zbGap),   zbY, zbW, zbH };
     btnZoomOut  = { zbX + 2 * (zbW + zbGap),   zbY, zbW, zbH };
+
+    float rcY = zbY + zbH + 6.0f * s;
+    float rcH = 26.0f * s;
+    btnResetCamera = { zbX, rcY, zbTotalW, rcH };
+
+    // ── Info button ───────────────────────────────────────────────────
+    float infoSz = 32.0f * s;
+    btnInfo = { 12.0f * s, 52.0f * s, infoSz, infoSz };
+
+    layoutIntroPage();
+}
+
+void UI::layoutIntroPage() {
+    float s = scale();
+    float pad = 16.0f * s;
+
+    if (introPage == 0) {
+        float dlgW = fminf(520.0f * s, (float)sw * 0.50f);
+        float dlgH = fminf(380.0f * s, (float)sh * 0.55f);
+        float dlgX = ((float)sw - dlgW) * 0.5f;
+        float dlgY = ((float)sh - dlgH) * 0.5f;
+        introTooltipRect = { dlgX, dlgY, dlgW, dlgH };
+    } else if (introPage == 1) {
+        float tw = 400.0f * s;
+        float th = 280.0f * s;
+        introTooltipRect = { 12.0f * s, 60.0f * s, tw, th };
+    } else {
+        Rectangle anchor = {};
+        bool anchorAbove = false;
+        bool anchorLeft  = false;
+
+        switch (introPage) {
+            case 2: anchor = bottomLeftPanel; anchorAbove = true; break;
+            case 3: anchor = zoomPanel;       anchorAbove = true; break;
+            case 4: anchor = btnQuit;         anchorAbove = true; anchorLeft = true; break;
+        }
+
+        float tw = 360.0f * s;
+        float th = 220.0f * s;
+        float tx, ty;
+
+        if (anchorAbove)
+            ty = anchor.y - th - 10.0f * s;
+        else
+            ty = anchor.y + anchor.height + 10.0f * s;
+
+        if (anchorLeft)
+            tx = anchor.x;
+        else
+            tx = anchor.x + anchor.width * 0.5f - tw * 0.5f;
+
+        tx = std::clamp(tx, 8.0f * s, (float)sw - tw - 8.0f * s);
+        ty = std::clamp(ty, 8.0f * s, (float)sh - th - 8.0f * s);
+        introTooltipRect = { tx, ty, tw, th };
+    }
+
+    float closeSz = 28.0f * s;
+    introBtnClose = {
+        introTooltipRect.x + introTooltipRect.width - closeSz - pad * 0.3f,
+        introTooltipRect.y + pad * 0.3f,
+        closeSz, closeSz
+    };
+
+    float navBtnW = 80.0f * s;
+    float navBtnH = 32.0f * s;
+    float navY = introTooltipRect.y + introTooltipRect.height - pad - navBtnH;
+    introBtnNext = {
+        introTooltipRect.x + introTooltipRect.width - pad - navBtnW,
+        navY, navBtnW, navBtnH
+    };
+    introBtnBack = {
+        introBtnNext.x - navBtnW - 8.0f * s,
+        navY, navBtnW, navBtnH
+    };
 }
 
 // ── UI init ────────────────────────────────────────────────────
@@ -267,6 +416,8 @@ void UI::init(int screenW, int screenH) {
     for (int i = 8320; i <= 8399; i++) codepoints[cpCount++] = i;
     codepoints[cpCount++] = 0x00D7;
     codepoints[cpCount++] = 0x2609;
+    codepoints[cpCount++] = 0x00BF;
+    codepoints[cpCount++] = 0x00A1;
 
     const char *fontRelPaths[] = {
         "assets/fonts/Inter_18pt-Medium.ttf",
@@ -304,9 +455,13 @@ void UI::init(int screenW, int screenH) {
     timeSlider.snapStep = 0.25f;
 
     loadFlags();
+    loadIntroImages();
     layout();
 
     loadHRData(AssetPath("assets/hr_data.csv"));
+
+    showIntroDialog = true;
+    introPage       = 0;
 }
 
 void UI::shutdown() {
@@ -318,6 +473,12 @@ void UI::shutdown() {
         if (flagsLoaded[i]) {
             UnloadTexture(flagTextures[i]);
             flagsLoaded[i] = false;
+        }
+    }
+    for (int i = 0; i < INTRO_IMAGE_COUNT; i++) {
+        if (introImagesLoaded[i]) {
+            UnloadTexture(introImages[i]);
+            introImagesLoaded[i] = false;
         }
     }
 }
@@ -534,7 +695,7 @@ void UI::drawZoomControls() const {
                  btnZoomIn.y + btnZoomIn.height * 0.5f - btnFs * 0.5f, btnFs, WHITE);
     }
 
-    // Track Centre of Mass  (crosshair icon: ⊕)
+    // Track Centre of Mass
     {
         bool active = trackingCOM;
         bool over   = CheckCollisionPointRec(pointer, btnTrackCOM) && Pointer::down();
@@ -544,7 +705,6 @@ void UI::drawZoomControls() const {
         DrawRectangleRounded(btnTrackCOM, 0.3f, 8, bg);
         DrawRectangleRoundedLinesEx(btnTrackCOM, 0.3f, 8, 1.5f * s, border);
 
-        // Draw a simple crosshair/target symbol
         float cx = btnTrackCOM.x + btnTrackCOM.width  * 0.5f;
         float cy = btnTrackCOM.y + btnTrackCOM.height * 0.5f;
         float r  = btnTrackCOM.height * 0.28f;
@@ -565,6 +725,20 @@ void UI::drawZoomControls() const {
         int tw = measureText(txt, btnFs);
         drawText(txt, btnZoomOut.x + btnZoomOut.width * 0.5f - tw * 0.5f,
                  btnZoomOut.y + btnZoomOut.height * 0.5f - btnFs * 0.5f, btnFs, WHITE);
+    }
+
+    // Reset Camera
+    {
+        bool over = CheckCollisionPointRec(pointer, btnResetCamera) && Pointer::down();
+        Color bg = over ? Color{60, 65, 100, 255} : Color{35, 38, 55, 240};
+        DrawRectangleRounded(btnResetCamera, 0.3f, 8, bg);
+        DrawRectangleRoundedLinesEx(btnResetCamera, 0.3f, 8, 1.0f * s, Color{90, 95, 130, 200});
+        const char *txt = loc(LKey::ResetCamera);
+        float rcFs = 12.0f * s;
+        int tw = measureText(txt, rcFs);
+        drawText(txt, btnResetCamera.x + btnResetCamera.width * 0.5f - tw * 0.5f,
+                 btnResetCamera.y + btnResetCamera.height * 0.5f - rcFs * 0.5f,
+                 rcFs, Color{200, 200, 220, 220});
     }
 }
 
@@ -599,9 +773,231 @@ void UI::drawTimeControls(const Simulation &sim) const {
     }
 }
 
+// ── Intro dialog update ────────────────────────────────────────
+
+void UI::updateIntroDialog() {
+    if (!showIntroDialog) return;
+
+    layoutIntroPage();
+
+    if (Pointer::pressed()) {
+        Vector2 pos = Pointer::position();
+
+        if (CheckCollisionPointRec(pos, introBtnClose)) {
+            showIntroDialog    = false;
+            introConsumedInput = true;
+            return;
+        }
+        if (CheckCollisionPointRec(pos, introBtnNext)) {
+            if (introPage < INTRO_PAGE_COUNT - 1) introPage++;
+            else showIntroDialog = false;
+            introConsumedInput = true;
+            return;
+        }
+        if (introPage > 0 && CheckCollisionPointRec(pos, introBtnBack)) {
+            introPage--;
+            introConsumedInput = true;
+            return;
+        }
+        if (CheckCollisionPointRec(pos, introTooltipRect)) {
+            introConsumedInput = true;
+            return;
+        }
+
+        // Click outside dialog — check if it's on normal UI
+        bool onUI = CheckCollisionPointRec(pos, rightPanel) ||
+                    CheckCollisionPointRec(pos, bottomLeftPanel) ||
+                    CheckCollisionPointRec(pos, zoomPanel) ||
+                    CheckCollisionPointRec(pos, btnTrackCOM) ||
+                    CheckCollisionPointRec(pos, btnInfo);
+        for (int i = 0; i < LANGUAGE_COUNT && !onUI; i++)
+            if (CheckCollisionPointRec(pos, flagRects[i])) onUI = true;
+
+        if (!onUI) {
+            showIntroDialog    = false;
+            introConsumedInput = true;
+        }
+    }
+}
+
+// ── Intro dialog draw ──────────────────────────────────────────
+
+void UI::drawIntroDialog() {
+    if (!showIntroDialog) return;
+
+    float s = scale();
+    float pad = 16.0f * s;
+    Rectangle r = introTooltipRect;
+
+    // Anchor highlight + connector line for pages 2-5
+    if (introPage >= 2) {
+        Rectangle anchor = {};
+        switch (introPage) {
+            case 2: anchor = bottomLeftPanel; break;
+            case 3: anchor = zoomPanel;       break;
+            case 4: anchor = btnQuit;         break;
+        }
+
+        DrawRectangleRoundedLinesEx(anchor, 0.08f, 8, 3.0f * s,
+                                    Color{100, 160, 255, 200});
+
+        Vector2 from = { r.x + r.width * 0.5f, r.y + r.height };
+        Vector2 to   = { anchor.x + anchor.width * 0.5f, anchor.y };
+        if (r.y + r.height > anchor.y) {
+            from.y = r.y;
+            to.y   = anchor.y + anchor.height;
+        }
+        DrawLineEx(from, to, 2.0f * s, Color{100, 160, 255, 150});
+    }
+
+    // Background
+    DrawRectangleRounded(r, 0.06f, 8, Color{18, 20, 32, 240});
+    DrawRectangleRoundedLinesEx(r, 0.06f, 8, 2.0f * s, Color{60, 70, 110, 220});
+
+    // Close (X)
+    {
+        DrawRectangleRounded(introBtnClose, 0.3f, 8, Color{60, 30, 30, 220});
+        float cx  = introBtnClose.x + introBtnClose.width * 0.5f;
+        float cy  = introBtnClose.y + introBtnClose.height * 0.5f;
+        float xsz = introBtnClose.width * 0.22f;
+        DrawLineEx({cx - xsz, cy - xsz}, {cx + xsz, cy + xsz}, 2.0f * s,
+                   Color{220, 150, 150, 255});
+        DrawLineEx({cx + xsz, cy - xsz}, {cx - xsz, cy + xsz}, 2.0f * s,
+                   Color{220, 150, 150, 255});
+    }
+
+    // Content
+    static const LKey pageKeys[] = {
+        LKey::IntroPage1, LKey::IntroPage2, LKey::IntroPage3,
+        LKey::IntroPage4, LKey::IntroPage5,
+    };
+    // Image indices per page: {first, second} (-1 = none)
+    static const int pageImgs[][2] = {
+        { 0, -1}, { 1,  2}, { 3, -1}, { 4, -1}, { 5, -1},
+    };
+
+    float navH   = 32.0f * s + pad + 8.0f * s;
+    float topPad = pad + (introPage == 0 ? 8.0f * s : 2.0f * s);
+
+    auto drawImgFit = [&](int idx, Rectangle b) {
+        if (idx < 0 || idx >= INTRO_IMAGE_COUNT) return;
+        if (introImagesLoaded[idx]) {
+            float ia = (float)introImages[idx].width / (float)introImages[idx].height;
+            float ba = b.width / b.height;
+            Rectangle dst;
+            if (ia > ba)
+                dst = { b.x, b.y + (b.height - b.width / ia) * 0.5f,
+                        b.width, b.width / ia };
+            else
+                dst = { b.x + (b.width - b.height * ia) * 0.5f, b.y,
+                        b.height * ia, b.height };
+            DrawTexturePro(introImages[idx],
+                {0, 0, (float)introImages[idx].width, (float)introImages[idx].height},
+                dst, {0, 0}, 0.0f, WHITE);
+        } else {
+            DrawRectangleRounded(b, 0.05f, 8, Color{30, 32, 48, 220});
+            DrawRectangleRoundedLinesEx(b, 0.05f, 8, 1.5f * s,
+                                        Color{55, 60, 85, 180});
+            static const char *imgDescs[] = {
+                "[ Touch & Drag ]", "[ Zoom / Rotate ]", "[ Pan ]",
+                "[ Speed Controls ]", "[ Zoom Panel ]", "[ Back Button ]",
+            };
+            const char *desc = (idx >= 0 && idx < INTRO_IMAGE_COUNT)
+                               ? imgDescs[idx] : "[ ? ]";
+            float pfs = 11.0f * s;
+            int dtw = measureText(desc, pfs);
+            drawText(desc, b.x + (b.width - dtw) * 0.5f,
+                     b.y + (b.height - pfs) * 0.5f, pfs,
+                     Color{100, 105, 130, 180});
+        }
+    };
+
+    if (introPage == 0) {
+        // Page 1: text left, image right
+        float imgW  = r.width * 0.36f;
+        float textW = r.width - 2.0f * pad - imgW - 8.0f * s;
+        float textH = r.height - topPad - navH;
+        Rectangle textB = { r.x + pad, r.y + topPad, textW, textH };
+        drawTextWrapped(loc(pageKeys[0]), textB, 14.0f * s,
+                        Color{210, 215, 235, 255});
+        Rectangle imgB = { r.x + r.width - pad - imgW, r.y + topPad, imgW, textH };
+        drawImgFit(pageImgs[0][0], imgB);
+    } else {
+        // Pages 2-5: text top ~50%, images bottom ~50%
+        float contentH = r.height - topPad - navH;
+        float textH    = contentH * 0.48f;
+        float gap      = 6.0f * s;
+        float imgH     = contentH - textH - gap;
+        float contentW = r.width - 2.0f * pad;
+
+        Rectangle textB = { r.x + pad, r.y + topPad, contentW, textH };
+        drawTextWrapped(loc(pageKeys[introPage]), textB, 13.0f * s,
+                        Color{210, 215, 235, 255});
+
+        float imgY = r.y + topPad + textH + gap;
+        if (pageImgs[introPage][1] >= 0) {
+            float halfW = (contentW - gap) * 0.5f;
+            Rectangle leftB  = { r.x + pad, imgY, halfW, imgH };
+            Rectangle rightB = { r.x + pad + halfW + gap, imgY, halfW, imgH };
+            drawImgFit(pageImgs[introPage][0], leftB);
+            drawImgFit(pageImgs[introPage][1], rightB);
+        } else {
+            Rectangle imgB = { r.x + pad + contentW * 0.15f, imgY,
+                               contentW * 0.7f, imgH };
+            drawImgFit(pageImgs[introPage][0], imgB);
+        }
+    }
+
+    // Page dots
+    {
+        float dotR   = 4.0f * s;
+        float dotSpc = dotR * 2.0f + 6.0f * s;
+        float totalW = dotSpc * (INTRO_PAGE_COUNT - 1);
+        float startX = r.x + r.width * 0.5f - totalW * 0.5f;
+        float dotsY  = introBtnNext.y + introBtnNext.height * 0.5f;
+
+        for (int i = 0; i < INTRO_PAGE_COUNT; i++) {
+            float cx = startX + i * dotSpc;
+            Color c = (i == introPage) ? Color{120, 160, 255, 255}
+                                       : Color{70, 75, 100, 180};
+            DrawCircle((int)cx, (int)dotsY, dotR, c);
+        }
+    }
+
+    // Next / Done
+    {
+        bool isLast = (introPage >= INTRO_PAGE_COUNT - 1);
+        const char *txt = loc(isLast ? LKey::IntroDone : LKey::IntroNext);
+        Color bg = Color{40, 60, 120, 240};
+        DrawRectangleRounded(introBtnNext, 0.3f, 8, bg);
+        DrawRectangleRoundedLinesEx(introBtnNext, 0.3f, 8, 1.5f * s,
+                                    Color{80, 110, 200, 220});
+        float fs = 14.0f * s;
+        int tw = measureText(txt, fs);
+        drawText(txt, introBtnNext.x + introBtnNext.width * 0.5f - tw * 0.5f,
+                 introBtnNext.y + introBtnNext.height * 0.5f - fs * 0.5f, fs, WHITE);
+    }
+
+    // Back
+    if (introPage > 0) {
+        const char *txt = loc(LKey::IntroBack);
+        Color bg = Color{45, 45, 60, 240};
+        DrawRectangleRounded(introBtnBack, 0.3f, 8, bg);
+        DrawRectangleRoundedLinesEx(introBtnBack, 0.3f, 8, 1.5f * s,
+                                    Color{80, 85, 120, 200});
+        float fs = 14.0f * s;
+        int tw = measureText(txt, fs);
+        drawText(txt, introBtnBack.x + introBtnBack.width * 0.5f - tw * 0.5f,
+                 introBtnBack.y + introBtnBack.height * 0.5f - fs * 0.5f, fs,
+                 Color{200, 200, 220, 255});
+    }
+}
+
 // ── Main update ────────────────────────────────────────────────
 
 void UI::update(Simulation &sim, float &outMass) {
+    introConsumedInput = false;
+
     int newW = GetScreenWidth();
     int newH = GetScreenHeight();
     if (newW != sw || newH != sh) {
@@ -609,6 +1005,8 @@ void UI::update(Simulation &sim, float &outMass) {
         sh = newH;
         layout();
     }
+
+    updateIntroDialog();
 
     zoomRequest = 0.0f;
 
@@ -637,8 +1035,17 @@ void UI::update(Simulation &sim, float &outMass) {
             if (sim.timeScale > 0.001f) sim.timeScale = 0.0f;
             else sim.timeScale = timeSlider.value > 0.01f ? timeSlider.value : 1.0f;
         }
-        if (CheckCollisionPointRec(pos, btnReset))
+        if (CheckCollisionPointRec(pos, btnReset)) {
             sim.clear();
+            resetCameraRequested = true;
+        }
+        if (CheckCollisionPointRec(pos, btnResetCamera)) {
+            resetCameraRequested = true;
+        }
+        if (CheckCollisionPointRec(pos, btnInfo)) {
+            showIntroDialog = true;
+            introPage = 0;
+        }
     }
 
     if (Pointer::pressed()) {
@@ -684,6 +1091,23 @@ void UI::draw(const Simulation &sim, float mass) {
     drawText(loc(LKey::TouchDragHint), 12 * s, 12 * s, 16 * s, Color{160,165,185,200});
     drawText(loc(LKey::ControlsHint),  12 * s, 32 * s, 13 * s, Color{100,105,130,180});
 
+    // Info button
+    {
+        Vector2 pointer = Pointer::position();
+        bool over = CheckCollisionPointRec(pointer, btnInfo) && Pointer::down();
+        Color bg = over ? Color{50, 55, 85, 240} : Color{35, 38, 55, 220};
+        DrawRectangleRounded(btnInfo, 1.0f, 8, bg);
+        DrawRectangleRoundedLinesEx(btnInfo, 1.0f, 8, 1.5f * s,
+                                    Color{80, 90, 150, 200});
+        float ifs = 18.0f * s;
+        const char *iText = "i";
+        int itw = measureText(iText, ifs);
+        drawText(iText, btnInfo.x + (btnInfo.width - itw) * 0.5f,
+                 btnInfo.y + (btnInfo.height - ifs) * 0.5f + 1.0f * s,
+                 ifs, Color{180, 190, 255, 240});
+    }
+
+    // Quit button
     {
         Vector2 pointer = Pointer::position();
         bool over = CheckCollisionPointRec(pointer, btnQuit) && Pointer::down();
@@ -705,7 +1129,6 @@ void UI::draw(const Simulation &sim, float mass) {
                  cx, 30 * s, 13 * s, GREEN);
         drawText(TextFormat("Time scale: %.3f", sim.timeScale),
                  cx, 46 * s, 13 * s, GREEN);
-        // Touch diagnostics: raw vs filtered
         drawText(TextFormat("RawTC:%d  RawTP:%.0f,%.0f  Mouse:%.0f,%.0f",
                  GetTouchPointCount(),
                  GetTouchPosition(0).x, GetTouchPosition(0).y,
@@ -718,13 +1141,20 @@ void UI::draw(const Simulation &sim, float mass) {
                  Pointer::down() ? "Y" : "N"),
                  cx, 76 * s, 11 * s, GREEN);
     }
+
+    // Intro dialog drawn last (modal overlay)
+    drawIntroDialog();
 }
 
 bool UI::isOverUI(Vector2 pos) const {
+    if (introConsumedInput) return true;
+    if (showIntroDialog && CheckCollisionPointRec(pos, introTooltipRect)) return true;
     if (CheckCollisionPointRec(pos, rightPanel))      return true;
     if (CheckCollisionPointRec(pos, bottomLeftPanel))  return true;
     if (CheckCollisionPointRec(pos, zoomPanel))        return true;
     if (CheckCollisionPointRec(pos, btnTrackCOM))      return true;
+    if (CheckCollisionPointRec(pos, btnInfo))          return true;
+    if (CheckCollisionPointRec(pos, btnResetCamera))   return true;
     for (int i = 0; i < LANGUAGE_COUNT; i++) {
         if (CheckCollisionPointRec(pos, flagRects[i])) return true;
     }

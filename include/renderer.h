@@ -10,6 +10,7 @@ public:
     void drawScene(const Simulation &sim);
     void shutdown();
     void zoomCamera(float delta);
+    void resetCamera();
 
     bool skyboxLoaded = false;
 
@@ -25,6 +26,9 @@ private:
     void drawVelocityArrow(Vector3 from, Vector3 to) const;
 
     int screenW, screenH;
+
+    Vector3 initialCamPos;
+    Vector3 initialCamTarget;
 
     friend class InputHandler;
 };

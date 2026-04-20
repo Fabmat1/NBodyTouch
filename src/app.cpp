@@ -2,8 +2,11 @@
 #include "pointer.h"
 #include "raylib.h"
 #include "raymath.h"
+#include <cmath>
 
 void App::run() {
+    if (quietMode) SetTraceLogLevel(LOG_NONE);
+
 #ifdef PLATFORM_ANDROID
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(0, 0, "N-Body Dynamics");
@@ -22,51 +25,37 @@ void App::run() {
     ui.init(screenW, screenH);
     ui.debugMode = debugMode;
 
-    // Offset from target when tracking was activated (for smooth blend-in)
     Vector3 trackStartOffset = Vector3Subtract(renderer.camera.position,
                                                renderer.camera.target);
+
+    float inactivityTimer = 0.0f;
 
     while (!WindowShouldClose() && !ui.quitRequested) {
         float dt = GetFrameTime();
         Pointer::beginFrame();
 
-        ui.update(sim, input.sliderMass);
-        input.update(sim, renderer, ui, dt);
-        sim.step(dt);
-
-        // ── Centre-of-mass tracking ───────────────────────────────────────
-
-        // Toggle on button press
+        // ── Inactivity detection ──────────────────────────────────────────
         {
-            bool btnHit = false;
-            if (Pointer::pressed()) {
-                Vector2 pos = Pointer::position();
-                if (CheckCollisionPointRec(pos, ui.btnTrackCOM)) btnHit = true;
-            }
-            if (!btnHit) {
-                for (int t = 0; t < Pointer::touchCount(); t++) {
-                    if (Pointer::pressed() &&
-                        CheckCollisionPointRec(Pointer::touchPosition(t), ui.btnTrackCOM))
-                        btnHit = true;
-                }
-            }
-            if (btnHit) {
-                ui.trackingCOM = !ui.trackingCOM;
-                if (ui.trackingCOM) {
-                    trackStartOffset = Vector3Subtract(renderer.camera.position,
-                                                       renderer.camera.target);
-                    ui.trackBlend = 0.0f;
-                }
-            }
+            bool anyActivity = Pointer::down() ||
+                               Pointer::pressed() ||
+                               Pointer::released() ||
+                               Pointer::touchCount() > 0 ||
+                               IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
+                               IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) ||
+                               GetKeyPressed() != 0 ||
+                               GetMouseWheelMove() != 0.0f;
+            Vector2 md = GetMouseDelta();
+            if (fabsf(md.x) > 0.5f || fabsf(md.y) > 0.5f)
+                anyActivity = true;
+
+            if (anyActivity) inactivityTimer = 0.0f;
+            else             inactivityTimer += dt;
+
+            if (inactivityTimeout > 0.0f && inactivityTimer >= inactivityTimeout)
+                break;
         }
 
-        // Auto-deactivate if the user manually panned
-        if (ui.trackingCOM && input.didManualPan()) {
-            ui.trackingCOM = false;
-            ui.trackBlend  = 0.0f;
-        }
-
-        // Compute centre of mass
+        // ── Compute centre of mass (for input handler) ───────────────────
         Vector3 com       = {0, 0, 0};
         float   totalMass = 0.0f;
         for (int i = 0; i < sim.starCount; i++) {
@@ -77,24 +66,83 @@ void App::run() {
         if (totalMass > 0.0f)
             com = Vector3Scale(com, 1.0f / totalMass);
 
+        input.currentCOM        = com;
+        input.comTrackingActive = ui.trackingCOM;
+
+        // ── Update ────────────────────────────────────────────────────────
+        ui.update(sim, input.sliderMass);
+        input.update(sim, renderer, ui, dt);
+        sim.step(dt);
+
+        if (IsKeyPressed(KEY_SPACE))
+            sim.timeScale = (sim.timeScale > 0.001f) ? 0.0f : 1.0f;
+        if (IsKeyPressed(KEY_C)) {
+            sim.clear();
+            ui.resetCameraRequested = true;
+        }
+
+        // ── Handle camera reset request ───────────────────────────────────
+        if (ui.resetCameraRequested) {
+            renderer.resetCamera();
+            ui.trackingCOM          = false;
+            ui.trackBlend           = 0.0f;
+            ui.resetCameraRequested = false;
+        }
+
+        // ── Centre-of-mass tracking toggle ────────────────────────────────
+        {
+            bool btnHit = false;
+            if (Pointer::pressed()) {
+                Vector2 pos = Pointer::position();
+                if (CheckCollisionPointRec(pos, ui.btnTrackCOM)) btnHit = true;
+            }
+            if (!btnHit) {
+                for (int t = 0; t < Pointer::touchCount(); t++) {
+                    if (Pointer::pressed() &&
+                        CheckCollisionPointRec(Pointer::touchPosition(t),
+                                               ui.btnTrackCOM))
+                        btnHit = true;
+                }
+            }
+            if (btnHit && !ui.showIntroDialog) {
+                ui.trackingCOM = !ui.trackingCOM;
+                if (ui.trackingCOM) {
+                    trackStartOffset = Vector3Subtract(renderer.camera.position,
+                                                       renderer.camera.target);
+                    ui.trackBlend = 0.0f;
+                }
+            }
+        }
+
+        if (ui.trackingCOM && input.didManualPan()) {
+            ui.trackingCOM = false;
+            ui.trackBlend  = 0.0f;
+        }
+
+        // ── Recompute COM after sim step for camera tracking ──────────────
+        com       = {0, 0, 0};
+        totalMass = 0.0f;
+        for (int i = 0; i < sim.starCount; i++) {
+            if (!sim.stars[i].active) continue;
+            com = Vector3Add(com, Vector3Scale(sim.stars[i].pos, sim.stars[i].mass));
+            totalMass += sim.stars[i].mass;
+        }
+        if (totalMass > 0.0f)
+            com = Vector3Scale(com, 1.0f / totalMass);
+
         if (ui.trackingCOM && sim.starCount > 0) {
-            // Advance blend 0→1 over ~0.5 s
             ui.trackBlend += dt / 0.5f;
             if (ui.trackBlend > 1.0f) ui.trackBlend = 1.0f;
 
-            // Ease-in-out cubic
             float blend = ui.trackBlend;
             blend = blend * blend * (3.0f - 2.0f * blend);
 
             if (ui.trackBlend >= 1.0f) {
-                // Fully tracking: keep camera offset, move target to COM
                 Vector3 offset = Vector3Subtract(renderer.camera.position,
                                                  renderer.camera.target);
                 renderer.camera.target   = com;
                 renderer.camera.position = Vector3Add(com, offset);
             } else {
-                // Smoothly interpolate target toward COM
-                // and position toward (COM + startOffset)
                 Vector3 desiredTarget   = com;
                 Vector3 desiredPosition = Vector3Add(com, trackStartOffset);
                 float   lerpSpeed       = blend * 6.0f * dt;
@@ -111,6 +159,7 @@ void App::run() {
         Vector3 camDiff = Vector3Subtract(renderer.camera.target, renderer.camera.position);
         ui.cameraZoom = 44.72f / fmaxf(Vector3Length(camDiff), 0.1f);
 
+        // ── Draw ──────────────────────────────────────────────────────────
         BeginDrawing();
             ClearBackground(BLACK);
 
@@ -151,10 +200,6 @@ void App::run() {
             }
 
             ui.draw(sim, input.sliderMass);
-
-            if (IsKeyPressed(KEY_SPACE))
-                sim.timeScale = (sim.timeScale > 0.001f) ? 0.0f : 1.0f;
-            if (IsKeyPressed(KEY_C)) sim.clear();
 
         EndDrawing();
     }

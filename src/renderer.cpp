@@ -66,6 +66,9 @@ void Renderer::init(int w, int h) {
     camera.fovy       = 60.0f;
     camera.projection = CAMERA_PERSPECTIVE;
 
+    initialCamPos    = camera.position;
+    initialCamTarget = camera.target;
+
     loadSkybox();
     generateGlowTexture();
 }
@@ -233,4 +236,10 @@ void Renderer::shutdown() {
         skyFacesLoaded = false;
     }
     if (glowTex.id != 0) UnloadTexture(glowTex);
+}
+
+void Renderer::resetCamera() {
+    camera.position = initialCamPos;
+    camera.target   = initialCamTarget;
+    camera.up       = {0.0f, 1.0f, 0.0f};
 }

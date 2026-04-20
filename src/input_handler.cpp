@@ -196,6 +196,12 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
         if (hitPlane) {
             dragStart = worldPos;
             dragEnd   = dragStart;
+            if (comTrackingActive) {
+                comAtDragStart      = currentCOM;
+                dragWithCOMTracking = true;
+            } else {
+                dragWithCOMTracking = false;
+            }
         }
     }
 
@@ -214,7 +220,12 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
     if (dragging && dragValid && Pointer::down()) {
         Vector3 worldPos;
         if (screenToWorldPlane(Pointer::position(), renderer.camera, worldPos)) {
-            dragEnd = worldPos;
+            if (dragWithCOMTracking) {
+                Vector3 comDelta = Vector3Subtract(currentCOM, comAtDragStart);
+                dragEnd = Vector3Subtract(worldPos, comDelta);
+            } else {
+                dragEnd = worldPos;
+            }
         }
     }
 
@@ -224,7 +235,12 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
 }
 
 void InputHandler::update(Simulation &sim, Renderer &renderer, const UI &ui, float dt) {
-    manualPanThisFrame = false;   // ← reset at top of frame
+    manualPanThisFrame = false;
+
+    if (ui.showIntroDialog) {
+        dragging = false;
+        return;
+    }
 
     if (invalidSpawnTimer > 0.0f) {
         invalidSpawnTimer -= dt;
