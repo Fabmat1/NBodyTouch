@@ -19,7 +19,7 @@ void App::run() {
     screenH = GetScreenHeight();
 #endif
 
-    SetTargetFPS(60);
+    if (targetFPS > 0) SetTargetFPS(targetFPS);
 
     renderer.init(screenW, screenH);
     ui.init(screenW, screenH);

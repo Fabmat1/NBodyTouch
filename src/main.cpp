@@ -11,6 +11,7 @@ int main(int argc, char *argv[]) {
     bool  debug   = false;
     bool  quiet   = false;
     float timeout = 300.0f;
+    int   fps     = 60;
     int   width   = SCREEN_W;
     int   height  = SCREEN_H;
 
@@ -34,6 +35,9 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--quiet") == 0 || strcmp(argv[i], "-q") == 0) {
             quiet = true;
         }
+        else if ((strcmp(argv[i], "--fps") == 0 || strcmp(argv[i], "-f") == 0) && i + 1 < argc) {
+            fps = atoi(argv[++i]);
+        }
         else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("  -d, --debug          Show FPS and debug info\n");
@@ -42,6 +46,7 @@ int main(int argc, char *argv[]) {
             printf("  -r, --root   <path>  Program root directory for assets\n");
             printf("  -t, --timeout <sec>  Inactivity timeout in seconds (default 300, 0=off)\n");
             printf("  -q, --quiet          Suppress terminal output\n");
+            printf("  -f, --fps    <int>   Target FPS (default 60, 0 = uncapped)\n");
             return 0;
         }
     }
@@ -53,6 +58,7 @@ int main(int argc, char *argv[]) {
     App app;
     app.debugMode         = debug;
     app.quietMode         = quiet;
+    app.targetFPS         = fps;
     app.inactivityTimeout = timeout;
     if (width > 0)  app.screenW = width;
     if (height > 0) app.screenH = height;
