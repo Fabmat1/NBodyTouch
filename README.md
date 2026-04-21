@@ -134,7 +134,55 @@ Stop with `Ctrl+C`. Return to the desktop with `Ctrl+Alt+F7` (or `F1` depending 
 
 ---
 
-## 5. Raspberry Pi Performance Tips
+## 5. Command-Line Flags
+
+The application accepts several runtime flags:
+
+| Short | Long | Argument | Description |
+|-------|------|----------|-------------|
+| `-d` | `--debug` | — | Show FPS counter and debug overlay |
+| `-w` | `--width` | `<int>` | Window width in pixels (default: `SCREEN_W`) |
+| `-h` | `--height` | `<int>` | Window height in pixels (default: `SCREEN_H`) |
+| `-r` | `--root` | `<path>` | Program root directory for asset lookups |
+| `-t` | `--timeout` | `<seconds>` | Inactivity timeout before auto-reset (default: `300`, `0` disables) |
+| `-q` | `--quiet` | — | Suppress terminal output |
+|      | `--help` | — | Print usage information and exit |
+
+### Examples
+
+Run fullscreen-sized with debug overlay:
+
+```sh
+./nbody_dynamics --debug --width 1920 --height 1080
+```
+
+Kiosk mode with no inactivity reset and silent logging:
+
+```sh
+./nbody_dynamics -t 0 -q
+```
+
+Point at an alternate asset directory (useful when running outside the build folder):
+
+```sh
+./nbody_dynamics --root /opt/nbody_dynamics
+```
+
+Combine with the SDL Wayland wrapper:
+
+```sh
+./run.sh --debug -t 600
+```
+
+> **Note:** On the `DRM` backend, window dimensions are ignored — the simulation always uses the native display resolution.
+
+---
+
+You may also want to tweak the **Troubleshooting** section to mention `--debug` as a first step for diagnosing rendering issues, e.g.:
+
+> **Black screen / nothing appears** — run with `--debug` to confirm the renderer is producing frames, and check the terminal output (drop `--quiet` if set).
+
+## 6. Raspberry Pi Performance Tips
 
 - Enable the **GL (Fake KMS)** or **KMS** driver via `sudo raspi-config` → *Advanced Options* → *GL Driver*. Required for hardware-accelerated OpenGL.
 - On a Pi 4, bumping the GPU memory split to 256 MB can help: `sudo raspi-config` → *Performance* → *GPU Memory*.
@@ -143,7 +191,7 @@ Stop with `Ctrl+C`. Return to the desktop with `Ctrl+Alt+F7` (or `F1` depending 
 
 ---
 
-## 6. Build Options Summary
+## 7. Build Options Summary
 
 | Option | Default | Description |
 |--------|---------|-------------|
