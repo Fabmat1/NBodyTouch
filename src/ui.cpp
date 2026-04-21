@@ -42,8 +42,16 @@ int UI::measureText(const char *text, float size) const {
 
 void UI::drawTextWrapped(const char *text, Rectangle bounds,
                          float fontSize, Color color) const {
-    float lineH  = fontSize * 1.4f;
-    float spaceW = (float)measureText(" ", fontSize);
+    const float spacing = 1.0f;
+    float lineH = fontSize * 1.4f;
+
+    auto measureF = [&](const char *s) -> float {
+        if (fontLoaded) return MeasureTextEx(uiFont, s, fontSize, spacing).x;
+        return (float)MeasureText(s, (int)fontSize);
+    };
+
+    float spaceW = measureF(" ");
+
     float x = bounds.x;
     float y = bounds.y;
 
@@ -72,7 +80,7 @@ void UI::drawTextWrapped(const char *text, Rectangle bounds,
         word[wlen] = '\0';
         p += wlen;
 
-        float ww = (float)measureText(word, fontSize);
+        float ww = measureF(word);
 
         if (x + ww > bounds.x + bounds.width && x > bounds.x) {
             x = bounds.x;
@@ -81,7 +89,11 @@ void UI::drawTextWrapped(const char *text, Rectangle bounds,
         }
 
         drawText(word, x, y, fontSize, color);
-        x += ww;
+
+        // Advance by the word's real width PLUS one spacing unit,
+        // so the next word's first glyph matches the inter-char rhythm
+        // used inside DrawTextEx itself.
+        x += ww + spacing;
     }
 }
 
@@ -408,8 +420,14 @@ void UI::layoutIntroPage() {
             case 4: anchor = btnQuit;         anchorAbove = true; anchorLeft = true; break;
         }
 
-        float tw = 360.0f * s;
-        float th = 220.0f * s;
+        float tw, th;
+        if (introPage == 3) {
+            tw = 400.0f * s;
+            th = 260.0f * s;
+        } else {
+            tw = 360.0f * s;
+            th = 220.0f * s;
+        }
         float tx, ty;
 
         if (anchorAbove)
