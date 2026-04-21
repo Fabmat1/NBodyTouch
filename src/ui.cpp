@@ -264,6 +264,33 @@ void UI::loadIntroImages() {
     }
 }
 
+void UI::loadScenarioImages() {
+    static const char *paths[SCENARIO_COUNT] = {
+        "assets/scenarios/triple.png",
+        "assets/scenarios/fantastic_four.png",
+        "assets/scenarios/freefall.png",
+        "assets/scenarios/infinity.png",
+        "assets/scenarios/recursion.png",
+        "assets/scenarios/ping_pong.png",
+    };
+    for (int i = 0; i < SCENARIO_COUNT; i++) {
+        const char *fullPath = AssetPath(paths[i]);
+#ifndef PLATFORM_ANDROID
+        if (!FileExists(fullPath)) {
+            scenarioImagesLoaded[i] = false;
+            continue;
+        }
+#endif
+        scenarioImages[i] = LoadTexture(fullPath);
+        if (scenarioImages[i].id != 0) {
+            SetTextureFilter(scenarioImages[i], TEXTURE_FILTER_BILINEAR);
+            scenarioImagesLoaded[i] = true;
+        } else {
+            scenarioImagesLoaded[i] = false;
+        }
+    }
+}
+
 // ── Layout ─────────────────────────────────────────────────────
 
 void UI::layout() {
@@ -291,6 +318,24 @@ void UI::layout() {
     massSlider.label  = loc(LKey::MassSun);
 
     hrRect = { panelX + 10.0f * s, 155.0f * s, panelW - 20.0f * s, 260.0f * s };
+    
+    float scPad    = 6.0f * s;
+    float scGap    = 5.0f * s;
+    float scBtnW   = (panelW - 2.0f * scPad - scGap) * 0.5f;
+    float scBtnH   = 85.0f * s;
+    float scHeadH  = 22.0f * s;
+    float gridY = hrRect.y + hrRect.height + 38.0f * s + scHeadH;
+
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 2; col++) {
+            int idx = row * 2 + col;
+            scenarioBtns[idx] = {
+                panelX + scPad + col * (scBtnW + scGap),
+                gridY + row * (scBtnH + scGap),
+                scBtnW, scBtnH
+            };
+        }
+    }
 
     btnQuit = { panelX + 5.0f * s, (float)sh - 46.0f * s, panelW - 10.0f * s, 36.0f * s };
 
@@ -456,6 +501,7 @@ void UI::init(int screenW, int screenH) {
 
     loadFlags();
     loadIntroImages();
+    loadScenarioImages();
     layout();
 
     loadHRData(AssetPath("assets/hr_data.csv"));
@@ -479,6 +525,12 @@ void UI::shutdown() {
         if (introImagesLoaded[i]) {
             UnloadTexture(introImages[i]);
             introImagesLoaded[i] = false;
+        }
+    }
+    for (int i = 0; i < SCENARIO_COUNT; i++) {
+        if (scenarioImagesLoaded[i]) {
+            UnloadTexture(scenarioImages[i]);
+            scenarioImagesLoaded[i] = false;
         }
     }
 }
@@ -563,7 +615,9 @@ static Vector2 hrToPixel(const Rectangle &r, float teff, float lum) {
     float tMin = 2000.0f, tMax = 40000.0f;
     float lMin = -4.5f,   lMax = 6.5f;
 
-    float xFrac = 1.0f - (teff - tMin) / (tMax - tMin);
+    float tClamped = std::clamp(teff, tMin, tMax);
+    float xFrac = 1.0f - (log10f(tClamped) - log10f(tMin)) /
+                         (log10f(tMax)     - log10f(tMin));
     float yFrac = 1.0f - (log10f(fmaxf(lum, 1e-6f)) - lMin) / (lMax - lMin);
 
     xFrac = std::clamp(xFrac, 0.0f, 1.0f);
@@ -820,6 +874,82 @@ void UI::updateIntroDialog() {
     }
 }
 
+void UI::drawScenarios() const {
+    float s = scale();
+    Vector2 pointer = Pointer::position();
+
+    static const LKey titleKeys[SCENARIO_COUNT] = {
+        LKey::ScenarioTriple,   LKey::ScenarioFour,
+        LKey::ScenarioFreefall, LKey::ScenarioInfinity,
+        LKey::ScenarioRecursion, LKey::ScenarioPingPong,
+    };
+
+    // Header
+    float headerY = scenarioBtns[0].y - 22.0f * s;
+    float headerFs = 14.0f * s;
+    drawText(loc(LKey::Scenarios),
+             scenarioBtns[0].x, headerY, headerFs,
+             Color{180, 185, 215, 255});
+
+    for (int i = 0; i < SCENARIO_COUNT; i++) {
+        Rectangle r = scenarioBtns[i];
+        bool over   = CheckCollisionPointRec(pointer, r) && Pointer::down();
+
+        Color bg     = over ? Color{55, 60, 90, 245} : Color{25, 28, 42, 235};
+        Color border = over ? Color{110, 140, 210, 230} : Color{60, 65, 90, 200};
+        DrawRectangleRounded(r, 0.1f, 8, bg);
+        DrawRectangleRoundedLinesEx(r, 0.1f, 8, 1.0f * s, border);
+
+        // Preview image
+        float titleH = 20.0f * s;
+        float imgPad = 4.0f * s;
+        Rectangle imgR = {
+            r.x + imgPad, r.y + imgPad,
+            r.width - 2.0f * imgPad,
+            r.height - titleH - imgPad
+        };
+
+        if (scenarioImagesLoaded[i]) {
+            float ia = (float)scenarioImages[i].width /
+                       (float)scenarioImages[i].height;
+            float ba = imgR.width / imgR.height;
+            Rectangle dst;
+            if (ia > ba)
+                dst = { imgR.x, imgR.y + (imgR.height - imgR.width / ia) * 0.5f,
+                        imgR.width, imgR.width / ia };
+            else
+                dst = { imgR.x + (imgR.width - imgR.height * ia) * 0.5f, imgR.y,
+                        imgR.height * ia, imgR.height };
+            DrawTexturePro(scenarioImages[i],
+                {0, 0, (float)scenarioImages[i].width,
+                       (float)scenarioImages[i].height},
+                dst, {0, 0}, 0.0f, WHITE);
+        } else {
+            DrawRectangleRounded(imgR, 0.06f, 8, Color{18, 20, 30, 220});
+            DrawRectangleRoundedLinesEx(imgR, 0.06f, 8, 1.0f * s,
+                                        Color{45, 50, 70, 180});
+            const char *ph = "?";
+            float pfs = imgR.height * 0.4f;
+            int pw = measureText(ph, pfs);
+            drawText(ph, imgR.x + (imgR.width - pw) * 0.5f,
+                     imgR.y + (imgR.height - pfs) * 0.5f, pfs,
+                     Color{70, 75, 100, 200});
+        }
+
+        // Title
+        const char *title = loc(titleKeys[i]);
+        float tfs = 10.0f * s;
+        int tw = measureText(title, tfs);
+        float maxTW = r.width - 6.0f * s;
+        if (tw > maxTW) tfs = tfs * maxTW / (float)tw;
+        tw = measureText(title, tfs);
+        drawText(title,
+                 r.x + (r.width - tw) * 0.5f,
+                 r.y + r.height - titleH + (titleH - tfs) * 0.5f,
+                 tfs, Color{215, 220, 240, 255});
+    }
+}
+
 // ── Intro dialog draw ──────────────────────────────────────────
 
 void UI::drawIntroDialog() {
@@ -993,6 +1123,76 @@ void UI::drawIntroDialog() {
     }
 }
 
+void UI::loadScenario(int idx, Simulation &sim) {
+    sim.clear();
+    resetCameraRequested = true;
+    trackingCOM = false;
+    trackBlend  = 0.0f;
+
+    switch (idx) {
+        case 0: {
+            // Triple Problem — equilateral triangle, one vertex perturbed
+            const float L = 10.0f;
+            const float R = L / sqrtf(3.0f);
+            const float v = sqrtf(G_CONST * 1.0f / L);
+
+            sim.addStar({R + 0.01f, 0, 0},        {0, 0, v},              1.0f, 0.0f);
+            sim.addStar({-R * 0.5f, 0,  R * 0.866025f},
+                        {-v * 0.866025f, 0, -v * 0.5f},                  1.0f, 0.0f);
+            sim.addStar({-R * 0.5f, 0, -R * 0.866025f},
+                        { v * 0.866025f, 0, -v * 0.5f},                  1.0f, 0.0f);
+            break;
+        }
+        case 1: {
+            // Fantastic Four — hierarchical quadruple
+            // Inner binary: 2×3 M☉ at ±1.5 (sep 3, tight)
+            // Outer binary: 2×0.3 M☉ at 12.75 and 11.25 (local COM at 12, sep 1.5)
+            sim.addStar({-0.2571f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, +8.0470f}, 3.0f, 0.0f);
+            sim.addStar({-1.4571f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -6.0952f}, 3.0f, 0.0f);
+            sim.addStar({+5.4429f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -1.7729f}, 0.5f, 0.0f);
+            sim.addStar({+4.8429f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -9.9379f}, 0.5f, 0.0f);
+            break;
+        }
+        case 2: {
+            // Freefall — 5×0.1 M☉ in eccentric pentagonal orbits around 10 M☉
+            sim.addStar({0, 0, 0}, {0, 0, 0}, 10.0f, 0.0f);
+            const float r = 20.0f;
+            const float v = 2.45f;   // e ≈ 0.7
+            sim.addStar({  r,      0,   0.0f   }, { 0.0f,     0,  v      }, 0.1f, 0.0f);
+            sim.addStar({  6.18f,  0,  19.02f  }, {-2.330f,   0,  0.757f }, 0.1f, 0.0f);
+            sim.addStar({-16.18f,  0,  11.76f  }, {-1.440f,   0, -1.982f }, 0.1f, 0.0f);
+            sim.addStar({-16.18f,  0, -11.76f  }, { 1.440f,   0, -1.982f }, 0.1f, 0.0f);
+            sim.addStar({  6.18f,  0, -19.02f  }, { 2.330f,   0,  0.757f }, 0.1f, 0.0f);
+            break;
+        }
+        case 3: {
+            // Infinity — Chenciner-Montgomery figure-eight
+
+            sim.addStar({+5.8200f, +0.0000f, -1.4585f}, {+1.7023f, +0.0000f, +1.5788f}, 2.0f, 0.0f);
+            sim.addStar({-5.8200f, +0.0000f, +1.4585f}, {+1.7023f, +0.0000f, +1.5788f}, 2.0f, 0.0f);
+            sim.addStar({+0.0000f, +0.0000f, +0.0000f}, {-3.4047f, +0.0000f, -3.1576f}, 2.0f, 0.0f);
+            break;
+        }
+        case 4: {
+            // Recursion — nested hierarchy 25 / 5 / 1 / 0.5 / 0.1 M☉
+            sim.addStar({  0, 0,   0}, {0, 0, -2.89f}, 25.0f, 0.0f);
+            sim.addStar({  4, 0,   0}, {0, 0, 14.43f},  5.0f, 0.0f);
+            sim.addStar({  0, 0,  10}, {-11.14f, 0, 0}, 1.0f, 0.0f);
+            sim.addStar({-18, 0,   0}, {0, 0, -8.37f},  0.5f, 0.0f);
+            sim.addStar({  0, 0, -25}, { 7.11f, 0, 0},  0.1f, 0.0f);
+            break;
+        }
+        case 5: {
+            // Wider binary + test particle offset perpendicular with
+            // retrograde x-velocity → long-lived bouncing before escape
+            sim.addStar({ 10.0f, 0, 0}, {0, 0,  4.999f}, 25.0f, 0.0f);
+            sim.addStar({-10.0f, 0, 0}, {0, 0, -4.999f}, 25.0f, 0.0f);
+            sim.addStar({  0.0f, 0, 1.5f}, {-1.2f, 0, 0}, 0.1f, 0.0f);
+            break;
+        }
+    }
+}
+
 // ── Main update ────────────────────────────────────────────────
 
 void UI::update(Simulation &sim, float &outMass) {
@@ -1046,6 +1246,12 @@ void UI::update(Simulation &sim, float &outMass) {
             showIntroDialog = true;
             introPage = 0;
         }
+        for (int i = 0; i < SCENARIO_COUNT; i++) {
+            if (CheckCollisionPointRec(pos, scenarioBtns[i])) {
+                loadScenario(i, sim);
+                break;
+            }
+        }
     }
 
     if (Pointer::pressed()) {
@@ -1082,6 +1288,8 @@ void UI::draw(const Simulation &sim, float mass) {
         float counterY = hrRect.y + hrRect.height + 22.0f * s;
         drawText(buf, rightPanel.x + 15 * s, counterY, 13 * s, Color{100,105,130,255});
     }
+    
+    drawScenarios();
 
     drawZoomControls();
 

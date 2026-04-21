@@ -134,23 +134,20 @@ void App::run() {
             ui.trackBlend += dt / 0.5f;
             if (ui.trackBlend > 1.0f) ui.trackBlend = 1.0f;
 
-            float blend = ui.trackBlend;
-            blend = blend * blend * (3.0f - 2.0f * blend);
+            float t = ui.trackBlend;
+            t = t * t * (3.0f - 2.0f * t);
 
-            if (ui.trackBlend >= 1.0f) {
-                Vector3 offset = Vector3Subtract(renderer.camera.position,
-                                                 renderer.camera.target);
-                renderer.camera.target   = com;
-                renderer.camera.position = Vector3Add(com, offset);
-            } else {
-                Vector3 desiredTarget   = com;
-                Vector3 desiredPosition = Vector3Add(com, trackStartOffset);
-                float   lerpSpeed       = blend * 6.0f * dt;
-                renderer.camera.target   = Vector3Lerp(renderer.camera.target,
-                                                        desiredTarget,   lerpSpeed);
-                renderer.camera.position = Vector3Lerp(renderer.camera.position,
-                                                        desiredPosition, lerpSpeed);
-            }
+            // Preserve current camera offset (allows orbit/zoom to still work)
+            Vector3 offset = Vector3Subtract(renderer.camera.position,
+                                             renderer.camera.target);
+
+            // Exponential catch-up with shrinking half-life:
+            //   t=0 → halfLife=0.3s (gentle), t=1 → near-instant tracking
+            float halfLife = 0.3f * (1.0f - t) + 0.001f;
+            float alpha = 1.0f - powf(0.5f, dt / halfLife);
+
+            renderer.camera.target   = Vector3Lerp(renderer.camera.target, com, alpha);
+            renderer.camera.position = Vector3Add(renderer.camera.target, offset);
         } else if (!ui.trackingCOM) {
             ui.trackBlend = 0.0f;
         }

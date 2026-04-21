@@ -31,6 +31,13 @@ enum class LKey {
     IntroNext,
     IntroBack,
     IntroDone,
+    Scenarios,
+    ScenarioTriple,
+    ScenarioFour,
+    ScenarioFreefall,
+    ScenarioInfinity,
+    ScenarioRecursion,
+    ScenarioPingPong,
     COUNT
 };
 
@@ -93,6 +100,13 @@ inline const Language LANGUAGES[] = {
             /*IntroNext*/        "Weiter",
             /*IntroBack*/        "Zurück",
             /*IntroDone*/        "Fertig",
+            /*Scenarios*/        "Szenarien",
+            /*ScenarioTriple*/   "Triple Problem",
+            /*ScenarioFour*/     "Fantastic Four",
+            /*ScenarioFreefall*/ "Freier Fall",
+            /*ScenarioInfinity*/ "Unendlichkeit",
+            /*ScenarioRecursion*/"Rekursion",
+            /*ScenarioPingPong*/ "Ping Pong",
         }
     },
     {
@@ -144,6 +158,13 @@ inline const Language LANGUAGES[] = {
             /*IntroNext*/         "Next",
             /*IntroBack*/         "Back",
             /*IntroDone*/         "Done",
+            /*Scenarios*/        "Scenarios",
+            /*ScenarioTriple*/   "Triple Problem",
+            /*ScenarioFour*/     "Fantastic Four",
+            /*ScenarioFreefall*/ "Freefall",
+            /*ScenarioInfinity*/ "Infinity",
+            /*ScenarioRecursion*/"Recursion",
+            /*ScenarioPingPong*/ "Ping Pong",
         }
     },
     {
@@ -196,6 +217,13 @@ inline const Language LANGUAGES[] = {
             /*IntroNext*/        "Siguiente",
             /*IntroBack*/        "Atrás",
             /*IntroDone*/        "Listo",
+            /*Scenarios*/        "Escenarios",
+            /*ScenarioTriple*/   "Problema Triple",
+            /*ScenarioFour*/     "Los Cuatro",
+            /*ScenarioFreefall*/ "Caída Libre",
+            /*ScenarioInfinity*/ "Infinito",
+            /*ScenarioRecursion*/"Recursión",
+            /*ScenarioPingPong*/ "Ping Pong",
         }
     },
 };

@@ -208,8 +208,11 @@ void InputHandler::handleStarPlacement(Simulation &sim, const Renderer &renderer
     if (dragging && Pointer::released()) {
         dragging = false;
         if (dragValid) {
+            Vector3 spawnPos = dragStart;
+            if (dragWithCOMTracking)
+                spawnPos = Vector3Add(spawnPos, Vector3Subtract(currentCOM, comAtDragStart));
             Vector3 vel = Vector3Scale(Vector3Subtract(dragStart, dragEnd), 3.0f);
-            sim.addStar(dragStart, vel, sliderMass, 0.0f);
+            sim.addStar(spawnPos, vel, sliderMass, 0.0f);
         } else {
             invalidSpawnTimer = invalidSpawnDuration;
             invalidScreenPos  = dragScreenStart;

@@ -74,6 +74,10 @@ private:
     Rectangle hrRect          = {};
     Rectangle btnInfo         = {};
     Rectangle btnResetCamera  = {};
+    static constexpr int SCENARIO_COUNT = 6;
+    Rectangle scenarioBtns[SCENARIO_COUNT] = {};
+    Texture2D scenarioImages[SCENARIO_COUNT] = {};
+    bool      scenarioImagesLoaded[SCENARIO_COUNT] = {};
 
     static constexpr int INTRO_PAGE_COUNT  = 5;
     static constexpr int INTRO_IMAGE_COUNT = 6;
@@ -96,6 +100,10 @@ private:
     void layout();
     void updateLanguageSelector();
     void updateIntroDialog();
+
+    void loadScenarioImages();
+    void drawScenarios() const;
+    void loadScenario(int idx, Simulation &sim);
 
     void drawHRDiagram(float mass) const;
     void drawTimeControls(const Simulation &sim) const;
