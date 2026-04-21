@@ -80,9 +80,6 @@ private:
     bool      scenarioImagesLoaded[SCENARIO_COUNT] = {};
 
     static constexpr int INTRO_PAGE_COUNT  = 5;
-    static constexpr int INTRO_IMAGE_COUNT = 6;
-    Texture2D introImages[INTRO_IMAGE_COUNT]     = {};
-    bool      introImagesLoaded[INTRO_IMAGE_COUNT] = {};
 
     Rectangle introTooltipRect = {};
     Rectangle introBtnClose    = {};

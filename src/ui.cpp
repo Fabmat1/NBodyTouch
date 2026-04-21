@@ -247,35 +247,6 @@ void UI::loadFlags() {
     }
 }
 
-// ── Intro image loading ────────────────────────────────────────
-
-void UI::loadIntroImages() {
-    static const char *paths[INTRO_IMAGE_COUNT] = {
-        "assets/intro/page1_touch_drag.png",
-        "assets/intro/page2_zoom.png",
-        "assets/intro/page2_pan.png",
-        "assets/intro/page3_speed.png",
-        "assets/intro/page4_zoom.png",
-        "assets/intro/page5_back.png",
-    };
-    for (int i = 0; i < INTRO_IMAGE_COUNT; i++) {
-        const char *fullPath = AssetPath(paths[i]);
-#ifndef PLATFORM_ANDROID
-        if (!FileExists(fullPath)) {
-            introImagesLoaded[i] = false;
-            continue;
-        }
-#endif
-        introImages[i] = LoadTexture(fullPath);
-        if (introImages[i].id != 0) {
-            SetTextureFilter(introImages[i], TEXTURE_FILTER_BILINEAR);
-            introImagesLoaded[i] = true;
-        } else {
-            introImagesLoaded[i] = false;
-        }
-    }
-}
-
 void UI::loadScenarioImages() {
     static const char *paths[SCENARIO_COUNT] = {
         "assets/scenarios/triple.png",
@@ -400,15 +371,13 @@ void UI::layoutIntroPage() {
     float pad = 16.0f * s;
 
     if (introPage == 0) {
-        float dlgW = fminf(520.0f * s, (float)sw * 0.50f);
+        float dlgW = fminf(440.0f * s, (float)sw * 0.50f);
         float dlgH = fminf(380.0f * s, (float)sh * 0.55f);
         float dlgX = ((float)sw - dlgW) * 0.5f;
         float dlgY = ((float)sh - dlgH) * 0.5f;
         introTooltipRect = { dlgX, dlgY, dlgW, dlgH };
     } else if (introPage == 1) {
-        float tw = 400.0f * s;
-        float th = 280.0f * s;
-        introTooltipRect = { 12.0f * s, 60.0f * s, tw, th };
+        introTooltipRect = { 12.0f * s, 60.0f * s, 360.0f * s, 160.0f * s };
     } else {
         Rectangle anchor = {};
         bool anchorAbove = false;
@@ -422,23 +391,17 @@ void UI::layoutIntroPage() {
 
         float tw, th;
         if (introPage == 3) {
-            tw = 400.0f * s;
-            th = 260.0f * s;
+            tw = 380.0f * s;
+            th = 180.0f * s;
         } else {
-            tw = 360.0f * s;
-            th = 220.0f * s;
+            tw = 340.0f * s;
+            th = 160.0f * s;
         }
-        float tx, ty;
 
-        if (anchorAbove)
-            ty = anchor.y - th - 10.0f * s;
-        else
-            ty = anchor.y + anchor.height + 10.0f * s;
-
-        if (anchorLeft)
-            tx = anchor.x;
-        else
-            tx = anchor.x + anchor.width * 0.5f - tw * 0.5f;
+        float tx = anchorLeft ? anchor.x
+                              : anchor.x + anchor.width * 0.5f - tw * 0.5f;
+        float ty = anchorAbove ? anchor.y - th - 10.0f * s
+                               : anchor.y + anchor.height + 10.0f * s;
 
         tx = std::clamp(tx, 8.0f * s, (float)sw - tw - 8.0f * s);
         ty = std::clamp(ty, 8.0f * s, (float)sh - th - 8.0f * s);
@@ -464,7 +427,6 @@ void UI::layoutIntroPage() {
         navY, navBtnW, navBtnH
     };
 }
-
 // ── UI init ────────────────────────────────────────────────────
 
 void UI::init(int screenW, int screenH) {
@@ -518,7 +480,6 @@ void UI::init(int screenW, int screenH) {
     timeSlider.snapStep = 0.25f;
 
     loadFlags();
-    loadIntroImages();
     loadScenarioImages();
     layout();
 
@@ -537,12 +498,6 @@ void UI::shutdown() {
         if (flagsLoaded[i]) {
             UnloadTexture(flagTextures[i]);
             flagsLoaded[i] = false;
-        }
-    }
-    for (int i = 0; i < INTRO_IMAGE_COUNT; i++) {
-        if (introImagesLoaded[i]) {
-            UnloadTexture(introImages[i]);
-            introImagesLoaded[i] = false;
         }
     }
     for (int i = 0; i < SCENARIO_COUNT; i++) {
@@ -1019,82 +974,19 @@ void UI::drawIntroDialog() {
         LKey::IntroPage1, LKey::IntroPage2, LKey::IntroPage3,
         LKey::IntroPage4, LKey::IntroPage5,
     };
-    // Image indices per page: {first, second} (-1 = none)
-    static const int pageImgs[][2] = {
-        { 0, -1}, { 1,  2}, { 3, -1}, { 4, -1}, { 5, -1},
-    };
 
-    float navH   = 32.0f * s + pad + 8.0f * s;
+    float navH = 32.0f * s + pad + 18.0f * s;
     float topPad = pad + (introPage == 0 ? 8.0f * s : 2.0f * s);
 
-    auto drawImgFit = [&](int idx, Rectangle b) {
-        if (idx < 0 || idx >= INTRO_IMAGE_COUNT) return;
-        if (introImagesLoaded[idx]) {
-            float ia = (float)introImages[idx].width / (float)introImages[idx].height;
-            float ba = b.width / b.height;
-            Rectangle dst;
-            if (ia > ba)
-                dst = { b.x, b.y + (b.height - b.width / ia) * 0.5f,
-                        b.width, b.width / ia };
-            else
-                dst = { b.x + (b.width - b.height * ia) * 0.5f, b.y,
-                        b.height * ia, b.height };
-            DrawTexturePro(introImages[idx],
-                {0, 0, (float)introImages[idx].width, (float)introImages[idx].height},
-                dst, {0, 0}, 0.0f, WHITE);
-        } else {
-            DrawRectangleRounded(b, 0.05f, 8, Color{30, 32, 48, 220});
-            DrawRectangleRoundedLinesEx(b, 0.05f, 8, 1.5f * s,
-                                        Color{55, 60, 85, 180});
-            static const char *imgDescs[] = {
-                "[ Touch & Drag ]", "[ Zoom / Rotate ]", "[ Pan ]",
-                "[ Speed Controls ]", "[ Zoom Panel ]", "[ Back Button ]",
-            };
-            const char *desc = (idx >= 0 && idx < INTRO_IMAGE_COUNT)
-                               ? imgDescs[idx] : "[ ? ]";
-            float pfs = 11.0f * s;
-            int dtw = measureText(desc, pfs);
-            drawText(desc, b.x + (b.width - dtw) * 0.5f,
-                     b.y + (b.height - pfs) * 0.5f, pfs,
-                     Color{100, 105, 130, 180});
-        }
+    Rectangle textB = {
+        r.x + pad,
+        r.y + topPad,
+        r.width  - 2.0f * pad,
+        r.height - topPad - navH
     };
-
-    if (introPage == 0) {
-        // Page 1: text left, image right
-        float imgW  = r.width * 0.36f;
-        float textW = r.width - 2.0f * pad - imgW - 8.0f * s;
-        float textH = r.height - topPad - navH;
-        Rectangle textB = { r.x + pad, r.y + topPad, textW, textH };
-        drawTextWrapped(loc(pageKeys[0]), textB, 14.0f * s,
-                        Color{210, 215, 235, 255});
-        Rectangle imgB = { r.x + r.width - pad - imgW, r.y + topPad, imgW, textH };
-        drawImgFit(pageImgs[0][0], imgB);
-    } else {
-        // Pages 2-5: text top ~50%, images bottom ~50%
-        float contentH = r.height - topPad - navH;
-        float textH    = contentH * 0.48f;
-        float gap      = 6.0f * s;
-        float imgH     = contentH - textH - gap;
-        float contentW = r.width - 2.0f * pad;
-
-        Rectangle textB = { r.x + pad, r.y + topPad, contentW, textH };
-        drawTextWrapped(loc(pageKeys[introPage]), textB, 13.0f * s,
-                        Color{210, 215, 235, 255});
-
-        float imgY = r.y + topPad + textH + gap;
-        if (pageImgs[introPage][1] >= 0) {
-            float halfW = (contentW - gap) * 0.5f;
-            Rectangle leftB  = { r.x + pad, imgY, halfW, imgH };
-            Rectangle rightB = { r.x + pad + halfW + gap, imgY, halfW, imgH };
-            drawImgFit(pageImgs[introPage][0], leftB);
-            drawImgFit(pageImgs[introPage][1], rightB);
-        } else {
-            Rectangle imgB = { r.x + pad + contentW * 0.15f, imgY,
-                               contentW * 0.7f, imgH };
-            drawImgFit(pageImgs[introPage][0], imgB);
-        }
-    }
+    float textFs = (introPage == 0) ? 14.0f * s : 13.0f * s;
+    drawTextWrapped(loc(pageKeys[introPage]), textB, textFs,
+                    Color{210, 215, 235, 255});
 
     // Page dots
     {
@@ -1102,7 +994,7 @@ void UI::drawIntroDialog() {
         float dotSpc = dotR * 2.0f + 6.0f * s;
         float totalW = dotSpc * (INTRO_PAGE_COUNT - 1);
         float startX = r.x + r.width * 0.5f - totalW * 0.5f;
-        float dotsY  = introBtnNext.y + introBtnNext.height * 0.5f;
+        float dotsY = introBtnNext.y - 10.0f * s;
 
         for (int i = 0; i < INTRO_PAGE_COUNT; i++) {
             float cx = startX + i * dotSpc;
