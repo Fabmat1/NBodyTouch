@@ -6,6 +6,11 @@
 int Simulation::addStar(Vector3 pos, Vector3 vel, float mass, float age) {
     if (starCount >= MAX_STARS) return -1;
     int i = starCount++;
+    // The simulation is planar (y = 0). Touch placement hits the plane only
+    // up to float rounding, and chaotic encounters amplify such tiny
+    // offsets until stars leave the plane, so snap them onto it exactly.
+    pos.y = 0.0f;
+    vel.y = 0.0f;
     stars[i] = Star{};
     stars[i].pos    = pos;
     stars[i].vel    = vel;
@@ -33,6 +38,7 @@ void Simulation::computeAccelerations(const State &s, int n, Vector3 *accel) con
             if (!stars[j].active) continue;
 
             Vector3 diff = Vector3Subtract(s.pos[j], s.pos[i]);
+            diff.y = 0.0f;   // in-plane forces only: y stays exactly 0
             float dist2  = Vector3DotProduct(diff, diff) + softening * softening;
             float dist   = sqrtf(dist2);
             float inv_dist3 = 1.0f / (dist2 * dist);
