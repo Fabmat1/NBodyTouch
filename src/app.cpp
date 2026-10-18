@@ -1,4 +1,5 @@
 #include "app.h"
+#include "assets.h"
 #include "pointer.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -33,6 +34,13 @@ void App::run() {
     InitWindow(screenW, screenH, "N-Body Dynamics — Astrophysics Explorer");
     screenW = GetScreenWidth();
     screenH = GetScreenHeight();
+
+    // Taskbar/title-bar icon (X11 and SDL; Wayland takes it from the .desktop entry)
+    if (FileExists(AssetPath("assets/icon.png"))) {
+        Image icon = LoadImage(AssetPath("assets/icon.png"));
+        SetWindowIcon(icon);
+        UnloadImage(icon);
+    }
 #endif
 
     SetTargetFPS(60);

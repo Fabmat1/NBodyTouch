@@ -11,6 +11,7 @@ Writes into android/app/src/main/res:
   mipmap-<density>/ic_launcher.png, ic_launcher_round.png
       legacy icons (48 dp, API 24-25)
   mipmap-anydpi-v26/ic_launcher.xml, ic_launcher_round.xml
+and assets/icon.png (512 px, desktop entry / window icon).
 
 Usage:  python3 generate_icon.py [--preview out.png]
 Requires numpy and Pillow.
@@ -22,8 +23,9 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-RES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "android", "app", "src", "main", "res")
+ROOT = os.path.dirname(os.path.abspath(__file__))
+RES_DIR = os.path.join(ROOT, "android", "app", "src", "main", "res")
+DESKTOP_ICON = os.path.join(ROOT, "assets", "icon.png")
 
 UNITS = 108                   # adaptive icon layer size in dp
 MASTER = 1728                 # master render size (16 px per dp)
@@ -209,9 +211,11 @@ def main():
         with open(os.path.join(d, name + ".xml"), "w") as f:
             f.write(ADAPTIVE_XML)
 
+    layers["ic_launcher"].resize((512, 512), Image.LANCZOS).save(DESKTOP_ICON, optimize=True)
+
     if args.preview:
         full.resize((432, 432), Image.LANCZOS).save(args.preview)
-    print(f"Icons written to {RES_DIR}")
+    print(f"Icons written to {RES_DIR} and {DESKTOP_ICON}")
 
 
 if __name__ == "__main__":
