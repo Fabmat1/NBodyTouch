@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// versionCode = number of commits on HEAD, so every new build can be
+// installed over the previous one (Android refuses downgrades).
+def gitCommitCount = providers.exec {
+    commandLine 'git', 'rev-list', '--count', 'HEAD'
+    workingDir rootDir
+    ignoreExitValue true
+}.standardOutput.asText.get().trim()
+def appVersionCode = gitCommitCount.isInteger() ? gitCommitCount.toInteger() : 1
+
+// Release key lives outside the repo (~/nbody-release.jks, NBODY_* entries in
+// ~/.gradle/gradle.properties). It must never change: Android only updates an
+// app in place when the new APK is signed with the same key.
+def releaseStoreFile = providers.gradleProperty('NBODY_STORE_FILE').orNull
+
 android {
     namespace 'com.nbody.touch'
     compileSdk 34
@@ -9,8 +23,8 @@ android {
         applicationId "com.nbody.touch"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName "1.${appVersionCode}"
 
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
@@ -31,9 +45,28 @@ android {
         }
     }
 
+    if (releaseStoreFile != null) {
+        signingConfigs {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword providers.gradleProperty('NBODY_STORE_PASSWORD').get()
+                keyAlias providers.gradleProperty('NBODY_KEY_ALIAS').get()
+                keyPassword providers.gradleProperty('NBODY_KEY_PASSWORD').get()
+            }
+        }
+    } else {
+        logger.warn('NBODY_STORE_FILE not set: release APK will be unsigned')
+    }
+
     buildTypes {
+        // Debug builds use the release key too, so debug and release APKs
+        // can replace each other on the phone without an uninstall.
+        debug {
+            if (releaseStoreFile != null) signingConfig signingConfigs.release
+        }
         release {
             minifyEnabled false
+            if (releaseStoreFile != null) signingConfig signingConfigs.release
         }
     }
 
