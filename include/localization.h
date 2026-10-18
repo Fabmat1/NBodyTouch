@@ -31,6 +31,19 @@ enum class LKey {
     IntroNext,
     IntroBack,
     IntroDone,
+    Speed,
+    Paused,
+    Mass,
+    Radius,
+    TrackOn,
+    TrackOff,
+    StarsCleared,
+    ViewReset,
+    MobileIntroPage1,
+    MobileIntroPage2,
+    MobileIntroPage3,
+    MobileIntroPage4,
+    MobileIntroPage5,
     COUNT
 };
 
@@ -93,6 +106,38 @@ inline const Language LANGUAGES[] = {
             /*IntroNext*/        "Weiter",
             /*IntroBack*/        "Zurück",
             /*IntroDone*/        "Fertig",
+            /*Speed*/          "Tempo",
+            /*Paused*/         "Pausiert",
+            /*Mass*/           "Masse",
+            /*Radius*/         "Radius",
+            /*TrackOn*/        "Kamera folgt dem Massenschwerpunkt",
+            /*TrackOff*/       "Freie Kamera",
+            /*StarsCleared*/   "Alle Sterne gelöscht",
+            /*ViewReset*/      "Ansicht zurückgesetzt",
+            /*MobileIntroPage1*/
+                "Willkommen zur N-Körper-Simulation!\n\n"
+                "Berühre den Bildschirm und ziehe, um einen Stern zu "
+                "erschaffen – Richtung und Länge bestimmen seine "
+                "Geschwindigkeit.\n\n"
+                "Schaffst du es, drei oder mehr Sterne stabil umeinander "
+                "kreisen zu lassen?",
+            /*MobileIntroPage2*/
+                "Zwei Finger auseinanderziehen zum Zoomen, drehen zum "
+                "Rotieren und gemeinsam hoch oder runter schieben zum "
+                "Neigen.\n\n"
+                "Mit drei Fingern verschiebst du die Ansicht.",
+            /*MobileIntroPage3*/
+                "Hier pausierst du die Zeit, änderst die "
+                "Simulationsgeschwindigkeit oder löschst alle Sterne.",
+            /*MobileIntroPage4*/
+                "Lass die Kamera dem Massenschwerpunkt folgen oder setze "
+                "die Ansicht zurück.\n\n"
+                "TIPP: Schalte das Folgen ein, sobald du 2 oder mehr "
+                "Sterne platziert hast!",
+            /*MobileIntroPage5*/
+                "Tippe hier, um die Masse des nächsten Sterns zu wählen. "
+                "Schwere Sterne sind heißer, blauer und viel heller – im "
+                "H-R-Diagramm siehst du, wo sie liegen.",
         }
     },
     {
@@ -144,6 +189,34 @@ inline const Language LANGUAGES[] = {
             /*IntroNext*/         "Next",
             /*IntroBack*/         "Back",
             /*IntroDone*/         "Done",
+            /*Speed*/           "Speed",
+            /*Paused*/          "Paused",
+            /*Mass*/            "Mass",
+            /*Radius*/          "Radius",
+            /*TrackOn*/         "Camera follows the center of mass",
+            /*TrackOff*/        "Free camera",
+            /*StarsCleared*/    "All stars cleared",
+            /*ViewReset*/       "View reset",
+            /*MobileIntroPage1*/
+                "Welcome to the N-Body Simulation!\n\n"
+                "Touch and drag anywhere to create a star – the direction "
+                "and length of your drag set its velocity.\n\n"
+                "Can you get three or more stars to orbit each other stably?",
+            /*MobileIntroPage2*/
+                "Pinch with two fingers to zoom, twist them to rotate the "
+                "view and slide them up or down to tilt it.\n\n"
+                "Drag with three fingers to pan.",
+            /*MobileIntroPage3*/
+                "Pause time, change the simulation speed or clear all "
+                "stars here.",
+            /*MobileIntroPage4*/
+                "Let the camera follow the center of mass, or reset the "
+                "view.\n\n"
+                "TIP: Turn on following once you placed 2 or more stars!",
+            /*MobileIntroPage5*/
+                "Tap here to choose the mass of the next star. Heavier "
+                "stars are hotter, bluer and much brighter – the H-R "
+                "diagram shows where they sit.",
         }
     },
     {
@@ -196,6 +269,39 @@ inline const Language LANGUAGES[] = {
             /*IntroNext*/        "Siguiente",
             /*IntroBack*/        "Atrás",
             /*IntroDone*/        "Listo",
+            /*Speed*/          "Velocidad",
+            /*Paused*/         "En pausa",
+            /*Mass*/           "Masa",
+            /*Radius*/         "Radio",
+            /*TrackOn*/        "La cámara sigue el centro de masa",
+            /*TrackOff*/       "Cámara libre",
+            /*StarsCleared*/   "Estrellas eliminadas",
+            /*ViewReset*/      "Vista restablecida",
+            /*MobileIntroPage1*/
+                "¡Bienvenido a la simulación de N-Cuerpos!\n\n"
+                "Toca y arrastra en cualquier lugar para crear una "
+                "estrella: la dirección y la longitud del arrastre "
+                "definen su velocidad.\n\n"
+                "¿Puedes lograr que tres o más estrellas orbiten de "
+                "forma estable?",
+            /*MobileIntroPage2*/
+                "Separa o junta dos dedos para hacer zoom, gíralos para "
+                "rotar la vista y deslízalos hacia arriba o abajo para "
+                "inclinarla.\n\n"
+                "Arrastra con tres dedos para desplazar la vista.",
+            /*MobileIntroPage3*/
+                "Aquí puedes pausar el tiempo, cambiar la velocidad de "
+                "simulación o eliminar todas las estrellas.",
+            /*MobileIntroPage4*/
+                "Haz que la cámara siga el centro de masa o restablece "
+                "la vista.\n\n"
+                "¡CONSEJO: Activa el seguimiento después de colocar 2 o "
+                "más estrellas!",
+            /*MobileIntroPage5*/
+                "Toca aquí para elegir la masa de la próxima estrella. "
+                "Las estrellas más pesadas son más calientes, más azules "
+                "y mucho más brillantes: mira dónde aparecen en el "
+                "diagrama H-R.",
         }
     },
 };

@@ -13,6 +13,7 @@
 // ── Helpers ────────────────────────────────────────────────────
 
 float UI::scale() const {
+    if (mobile) return dpScale;
     float s = fminf((float)sw / 1920.0f, (float)sh / 1080.0f);
 #ifdef PLATFORM_ANDROID
     s *= 2.2f;
@@ -267,6 +268,7 @@ void UI::loadIntroImages() {
 // ── Layout ─────────────────────────────────────────────────────
 
 void UI::layout() {
+    if (mobile) { layoutMobile(); return; }
     float s = scale();
 
     float panelW = 250.0f * s;
@@ -339,6 +341,7 @@ void UI::layout() {
 }
 
 void UI::layoutIntroPage() {
+    if (mobile) { layoutIntroMobile(); return; }
     float s = scale();
     float pad = 16.0f * s;
 
@@ -407,6 +410,10 @@ void UI::layoutIntroPage() {
 void UI::init(int screenW, int screenH) {
     sw = screenW;
     sh = screenH;
+    if (mobile) {
+        initMobileMetrics();
+        detectSystemLanguage();
+    }
 
     int codepoints[1024];
     int cpCount = 0;
@@ -431,7 +438,8 @@ void UI::init(int screenW, int screenH) {
 #ifndef PLATFORM_ANDROID
         if (!FileExists(path)) continue;
 #endif
-        uiFont = LoadFontEx(path, 48, codepoints, cpCount);
+        // High-DPI phones render text at ~50-70 px, so rasterize larger there
+        uiFont = LoadFontEx(path, mobile ? 72 : 48, codepoints, cpCount);
         if (uiFont.texture.id != 0) {
             SetTextureFilter(uiFont.texture, TEXTURE_FILTER_BILINEAR);
             fontLoaded = true;
@@ -805,7 +813,8 @@ void UI::updateIntroDialog() {
         }
 
         // Click outside dialog — check if it's on normal UI
-        bool onUI = CheckCollisionPointRec(pos, rightPanel) ||
+        bool onUI = mobile ? isOverUIMobile(pos) :
+                    CheckCollisionPointRec(pos, rightPanel) ||
                     CheckCollisionPointRec(pos, bottomLeftPanel) ||
                     CheckCollisionPointRec(pos, zoomPanel) ||
                     CheckCollisionPointRec(pos, btnTrackCOM) ||
@@ -1003,12 +1012,19 @@ void UI::update(Simulation &sim, float &outMass) {
     if (newW != sw || newH != sh) {
         sw = newW;
         sh = newH;
+        if (mobile) initMobileMetrics();
         layout();
     }
 
     updateIntroDialog();
 
     zoomRequest = 0.0f;
+
+    if (mobile) {
+        updateMobile(sim);
+        outMass = massSlider.value;
+        return;
+    }
 
     updateLanguageSelector();
 
@@ -1046,6 +1062,11 @@ void UI::update(Simulation &sim, float &outMass) {
             showIntroDialog = true;
             introPage = 0;
         }
+        bool trackHit = CheckCollisionPointRec(pos, btnTrackCOM);
+        for (int t = 0; t < Pointer::touchCount(); t++)
+            if (CheckCollisionPointRec(Pointer::touchPosition(t), btnTrackCOM))
+                trackHit = true;
+        if (trackHit && !showIntroDialog) trackToggleRequested = true;
     }
 
     if (Pointer::pressed()) {
@@ -1064,6 +1085,7 @@ void UI::update(Simulation &sim, float &outMass) {
 // ── Main draw ──────────────────────────────────────────────────
 
 void UI::draw(const Simulation &sim, float mass) {
+    if (mobile) { drawMobile(sim, mass); return; }
     float s = scale();
 
     drawPanelBackgrounds();
@@ -1149,6 +1171,7 @@ void UI::draw(const Simulation &sim, float mass) {
 bool UI::isOverUI(Vector2 pos) const {
     if (introConsumedInput) return true;
     if (showIntroDialog && CheckCollisionPointRec(pos, introTooltipRect)) return true;
+    if (mobile) return isOverUIMobile(pos);
     if (CheckCollisionPointRec(pos, rightPanel))      return true;
     if (CheckCollisionPointRec(pos, bottomLeftPanel))  return true;
     if (CheckCollisionPointRec(pos, zoomPanel))        return true;

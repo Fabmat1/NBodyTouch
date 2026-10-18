@@ -26,12 +26,14 @@ add_library(NBodyTouch SHARED
     ${NBODY_ROOT}/src/renderer.cpp
     ${NBODY_ROOT}/src/input_handler.cpp
     ${NBODY_ROOT}/src/ui.cpp
+    ${NBODY_ROOT}/src/ui_mobile.cpp
     ${NBODY_ROOT}/src/assets.cpp
 )
 
 target_include_directories(NBodyTouch PRIVATE
     ${NBODY_ROOT}/include
     ${RAYLIB_ROOT}/src
+    ${ANDROID_NDK}/sources/android/native_app_glue
 )
 
 target_compile_definitions(NBodyTouch PRIVATE

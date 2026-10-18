@@ -3,12 +3,28 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <cmath>
+#include <cstring>
+
+#ifdef PLATFORM_ANDROID
+#include <sys/system_properties.h>
+
+static bool IsAndroidEmulator() {
+    char val[PROP_VALUE_MAX] = {};
+    if (__system_property_get("ro.boot.qemu", val) > 0 && val[0] == '1') return true;
+    if (__system_property_get("ro.kernel.qemu", val) > 0 && val[0] == '1') return true;
+    if (__system_property_get("ro.hardware", val) > 0 &&
+        (strcmp(val, "ranchu") == 0 || strcmp(val, "goldfish") == 0)) return true;
+    return false;
+}
+#endif
 
 void App::run() {
     if (quietMode) SetTraceLogLevel(LOG_NONE);
 
 #ifdef PLATFORM_ANDROID
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    // The emulator's EGL has no 4x MSAA config; requesting one leaves the
+    // surface uncreated and the screen black.
+    if (!IsAndroidEmulator()) SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(0, 0, "N-Body Dynamics");
     screenW = GetScreenWidth();
     screenH = GetScreenHeight();
@@ -22,6 +38,7 @@ void App::run() {
     SetTargetFPS(60);
 
     renderer.init(screenW, screenH);
+    ui.mobile = mobileUI;
     ui.init(screenW, screenH);
     ui.debugMode = debugMode;
 
@@ -91,20 +108,8 @@ void App::run() {
 
         // ── Centre-of-mass tracking toggle ────────────────────────────────
         {
-            bool btnHit = false;
-            if (Pointer::pressed()) {
-                Vector2 pos = Pointer::position();
-                if (CheckCollisionPointRec(pos, ui.btnTrackCOM)) btnHit = true;
-            }
-            if (!btnHit) {
-                for (int t = 0; t < Pointer::touchCount(); t++) {
-                    if (Pointer::pressed() &&
-                        CheckCollisionPointRec(Pointer::touchPosition(t),
-                                               ui.btnTrackCOM))
-                        btnHit = true;
-                }
-            }
-            if (btnHit && !ui.showIntroDialog) {
+            if (ui.trackToggleRequested) {
+                ui.trackToggleRequested = false;
                 ui.trackingCOM = !ui.trackingCOM;
                 if (ui.trackingCOM) {
                     trackStartOffset = Vector3Subtract(renderer.camera.position,
@@ -187,14 +192,14 @@ void App::run() {
                 unsigned char a = (unsigned char)(alpha * 220);
                 Color col = { 255, 60, 60, a };
                 Vector2 p = input.invalidSpawnPos();
-                float sz = 20.0f;
+                float sz = 20.0f * ui.uiScale();
 
                 DrawLineEx({p.x - sz, p.y - sz}, {p.x + sz, p.y + sz}, 5.0f, col);
                 DrawLineEx({p.x + sz, p.y - sz}, {p.x - sz, p.y + sz}, 5.0f, col);
 
                 Color textCol = { 255, 180, 180, a };
                 const char *msg = ui.loc(LKey::OutsideSpawnArea);
-                float fs = 16.0f;
+                float fs = 16.0f * ui.uiScale();
                 int tw = ui.measureText(msg, fs);
                 ui.drawText(msg, p.x - tw * 0.5f, p.y + sz * 1.5f, fs, textCol);
             }

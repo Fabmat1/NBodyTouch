@@ -71,6 +71,7 @@ set(SOURCES
     src/simulation.cpp
     src/star.cpp
     src/ui.cpp
+    src/ui_mobile.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

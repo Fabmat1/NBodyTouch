@@ -8,6 +8,7 @@ class App {
 public:
     bool  debugMode         = false;
     bool  quietMode         = false;
+    bool  mobileUI          = false;
     float inactivityTimeout = 300.0f;
     int   screenW           = SCREEN_W;
     int   screenH           = SCREEN_H;

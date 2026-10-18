@@ -4,12 +4,10 @@
 #include <cstring>
 #include <cstdlib>
 
-#ifdef PLATFORM_ANDROID
-#endif
-
 int main(int argc, char *argv[]) {
     bool  debug   = false;
     bool  quiet   = false;
+    bool  mobile  = false;
     float timeout = 300.0f;
     int   width   = SCREEN_W;
     int   height  = SCREEN_H;
@@ -34,6 +32,9 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--quiet") == 0 || strcmp(argv[i], "-q") == 0) {
             quiet = true;
         }
+        else if (strcmp(argv[i], "--mobile") == 0 || strcmp(argv[i], "-m") == 0) {
+            mobile = true;
+        }
         else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("  -d, --debug          Show FPS and debug info\n");
@@ -42,17 +43,21 @@ int main(int argc, char *argv[]) {
             printf("  -r, --root   <path>  Program root directory for assets\n");
             printf("  -t, --timeout <sec>  Inactivity timeout in seconds (default 300, 0=off)\n");
             printf("  -q, --quiet          Suppress terminal output\n");
+            printf("  -m, --mobile         Use the touch-first phone layout\n");
             return 0;
         }
     }
 #else
-    width  = 0;
-    height = 0;
+    width   = 0;
+    height  = 0;
+    timeout = 0.0f;   // a phone app must not quit itself when idle
+    mobile  = true;
 #endif
 
     App app;
     app.debugMode         = debug;
     app.quietMode         = quiet;
+    app.mobileUI          = mobile;
     app.inactivityTimeout = timeout;
     if (width > 0)  app.screenW = width;
     if (height > 0) app.screenH = height;
