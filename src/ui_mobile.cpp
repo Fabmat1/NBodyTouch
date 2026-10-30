@@ -47,9 +47,6 @@ const float SPEED_STEPS[]  = {0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 3.0f, 5.0f};
 const int   SPEED_STEP_COUNT = sizeof(SPEED_STEPS) / sizeof(SPEED_STEPS[0]);
 const float MASS_PRESETS[] = {0.5f, 1.0f, 2.0f, 5.0f, 10.0f, 30.0f};
 
-// Main-sequence relation used by stellarModel(): T = 5778 K * M^0.475
-constexpr float MS_TEMP_EXPONENT = 0.475f;
-
 Color withAlpha(Color c, float a) {
     c.a = (unsigned char)std::clamp(c.a * a, 0.0f, 255.0f);
     return c;
@@ -483,13 +480,9 @@ void UI::updateMobile(Simulation &sim) {
         if (!hrDragging) massSlider.update();
 
         // Dragging across the H-R diagram picks the main-sequence star
-        // with that temperature
+        // with that colour (temperature)
         if (hrDragging) {
-            Rectangle plot = hrPlotRect();
-            float xFrac = (pos.x - plot.x - 12.0f) / fmaxf(plot.width - 24.0f, 1.0f);
-            xFrac = std::clamp(xFrac, 0.0f, 1.0f);
-            float teff = 2000.0f + (1.0f - xFrac) * (40000.0f - 2000.0f);
-            float mass = powf(teff / 5778.0f, 1.0f / MS_TEMP_EXPONENT);
+            float mass = mainSequenceMassForBpRp(hrBpRpAtX(hrPlotRect(), pos.x));
             massSlider.value = std::clamp(mass, massSlider.minVal, massSlider.maxVal);
         }
     }

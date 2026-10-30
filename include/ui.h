@@ -18,10 +18,15 @@ struct UISlider {
     bool update();
 };
 
+// One observed star in the background of the H-R diagram (Gaia DR3)
 struct HRPoint {
-    float teff;
-    float luminosity;
+    float bpRp;   // colour BP-RP, a proxy for temperature
+    float absG;   // absolute G magnitude, a proxy for luminosity
 };
+
+// H-R diagram axes: plot rectangle <-> (BP-RP, M_G)
+Vector2 hrToPixel(const Rectangle &plot, float bpRp, float absG);
+float   hrBpRpAtX(const Rectangle &plot, float x);
 
 class UI {
 public:
@@ -95,6 +100,9 @@ private:
     void layoutIntroPage();
 
     std::vector<HRPoint> hrData;
+    // Gaia stars pre-rendered as a density map; rebuilt when the plot resizes
+    mutable Texture2D hrDensityTex = {};
+    void buildHRDensity(int w, int h) const;
 
     void loadHRData(const char *path);
     void loadFlags();

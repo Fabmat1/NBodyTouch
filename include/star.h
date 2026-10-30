@@ -36,6 +36,16 @@ struct Star {
 };
 
 Color temperatureToColor(float tempK);
+
+// Main-sequence (dwarf) star of a given mass, interpolated in log M from the
+// Pecaut & Mamajek dwarf sequence. bpRp / absG are the Gaia colour and
+// absolute G magnitude that place it on the H-R diagram.
+struct MainSequencePoint {
+    float teff, luminosity, radius, bpRp, absG;
+};
+MainSequencePoint mainSequence(float mass);
+float mainSequenceMassForBpRp(float bpRp);   // inverse along the main sequence
+float mainSequenceTeffForBpRp(float bpRp);   // colour -> temperature (dwarfs)
 void  stellarModel(float mass, float age,
                    float &outRadius, float &outLuminosity,
                    float &outTempK);

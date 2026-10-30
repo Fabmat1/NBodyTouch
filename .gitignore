@@ -30,3 +30,5 @@ android/.gradle/
 android/build/
 android/local.properties
 android/gradle/wrapper/gradle-wrapper.jar
+# fetch_hr_data.py download cache
+.hr_cache/

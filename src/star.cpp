@@ -1,20 +1,61 @@
 #include "star.h"
+#include "main_sequence_table.h"
 #include <cmath>
 #include <algorithm>
+
+// Index i of the table segment [i, i+1] to interpolate in, and the fraction f
+// along it; key(row) must increase along the table.
+template <typename Key>
+static int msSegment(float x, Key key, float &f) {
+    int i = 0;
+    while (i < MS_TABLE_COUNT - 2 && key(MS_TABLE[i + 1]) < x) i++;
+    float a = key(MS_TABLE[i]), b = key(MS_TABLE[i + 1]);
+    f = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
+    return i;
+}
+
+static float lerpf(float a, float b, float f) { return a + (b - a) * f; }
+
+MainSequencePoint mainSequence(float mass) {
+    float f;
+    int i = msSegment(log10f(mass), [](const MSRow &r) { return log10f(r.mass); }, f);
+    const MSRow &a = MS_TABLE[i], &b = MS_TABLE[i + 1];
+    return {
+        powf(10.0f, lerpf(log10f(a.teff),   log10f(b.teff),   f)),
+        powf(10.0f, lerpf(a.logL,           b.logL,           f)),
+        powf(10.0f, lerpf(log10f(a.radius), log10f(b.radius), f)),
+        lerpf(a.bpRp, b.bpRp, f),
+        lerpf(a.absG, b.absG, f),
+    };
+}
+
+float mainSequenceMassForBpRp(float bpRp) {
+    // BP-RP falls with mass, so search on -BP-RP
+    float f;
+    int i = msSegment(-bpRp, [](const MSRow &r) { return -r.bpRp; }, f);
+    return powf(10.0f, lerpf(log10f(MS_TABLE[i].mass), log10f(MS_TABLE[i + 1].mass), f));
+}
+
+float mainSequenceTeffForBpRp(float bpRp) {
+    float f;
+    int i = msSegment(-bpRp, [](const MSRow &r) { return -r.bpRp; }, f);
+    return powf(10.0f, lerpf(log10f(MS_TABLE[i].teff), log10f(MS_TABLE[i + 1].teff), f));
+}
 
 void stellarModel(float mass, float age,
                   float &outRadius, float &outLuminosity, float &outTempK)
 {
     float msLifetime = 10.0f * powf(mass, -2.5f);
+    MainSequencePoint ms = mainSequence(mass);
 
     if (age < msLifetime) {
-        outLuminosity = powf(mass, 3.5f);
-        outRadius     = powf(mass, 0.8f);
-        outTempK      = 5778.0f * powf(outLuminosity, 0.25f) / sqrtf(outRadius);
+        outLuminosity = ms.luminosity;
+        outRadius     = ms.radius;
+        outTempK      = ms.teff;
     } else if (age < msLifetime * 1.3f) {
         float frac    = (age - msLifetime) / (msLifetime * 0.3f);
-        outLuminosity = powf(mass, 3.5f) * (1.0f + 99.0f * frac);
-        outRadius     = powf(mass, 0.8f) * (1.0f + 49.0f * frac);
+        outLuminosity = ms.luminosity * (1.0f + 99.0f * frac);
+        outRadius     = ms.radius * (1.0f + 49.0f * frac);
         outTempK      = 3500.0f + (1.0f - frac) * 1500.0f;
     } else {
         float wdAge   = age - msLifetime * 1.3f;
@@ -25,8 +66,8 @@ void stellarModel(float mass, float age,
     }
 
     outRadius     = std::clamp(outRadius, 0.01f, 60.0f);
-    outLuminosity = std::clamp(outLuminosity, 0.0001f, 100000.0f);
-    outTempK      = std::clamp(outTempK, 2000.0f, 40000.0f);
+    outLuminosity = std::clamp(outLuminosity, 0.0001f, 1.0e6f);
+    outTempK      = std::clamp(outTempK, 2000.0f, 50000.0f);
 }
 
 // Attempt a perceptually correct blackbody → sRGB mapping

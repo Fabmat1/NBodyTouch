@@ -216,9 +216,9 @@ void UI::loadHRData(const char *path) {
             line = strtok(nullptr, "\n\r");
             continue;
         }
-        float teff = 0, lum = 0;
-        if (sscanf(line, "%f,%f", &teff, &lum) == 2) {
-            hrData.push_back({teff, lum});
+        float bpRp = 0, absG = 0;
+        if (sscanf(line, "%f,%f", &bpRp, &absG) == 2) {
+            hrData.push_back({bpRp, absG});
         }
         line = strtok(nullptr, "\n\r");
     }
@@ -507,6 +507,10 @@ void UI::shutdown() {
             flagsLoaded[i] = false;
         }
     }
+    if (hrDensityTex.id != 0) {
+        UnloadTexture(hrDensityTex);
+        hrDensityTex = {};
+    }
     for (int i = 0; i < SCENARIO_COUNT; i++) {
         if (scenarioImagesLoaded[i]) {
             UnloadTexture(scenarioImages[i]);
@@ -591,23 +595,100 @@ void UI::drawPanelBackgrounds() const {
 
 // ── H-R Diagram ────────────────────────────────────────────────
 
-static Vector2 hrToPixel(const Rectangle &r, float teff, float lum) {
-    float tMin = 2000.0f, tMax = 40000.0f;
-    float lMin = -4.5f,   lMax = 6.5f;
+// Colour-magnitude axes: blue (hot) left, bright at the top
+static constexpr float HR_BPRP_MIN = -0.7f, HR_BPRP_MAX = 4.6f;
+static constexpr float HR_ABSG_MIN = -6.5f, HR_ABSG_MAX = 17.0f;
 
-    float tClamped = std::clamp(teff, tMin, tMax);
-    float xFrac = 1.0f - (log10f(tClamped) - log10f(tMin)) /
-                         (log10f(tMax)     - log10f(tMin));
-    float yFrac = 1.0f - (log10f(fmaxf(lum, 1e-6f)) - lMin) / (lMax - lMin);
+Vector2 hrToPixel(const Rectangle &r, float bpRp, float absG) {
+    float xFrac = (bpRp - HR_BPRP_MIN) / (HR_BPRP_MAX - HR_BPRP_MIN);
+    float yFrac = (absG - HR_ABSG_MIN) / (HR_ABSG_MAX - HR_ABSG_MIN);
+    return { r.x + std::clamp(xFrac, 0.0f, 1.0f) * r.width,
+             r.y + std::clamp(yFrac, 0.0f, 1.0f) * r.height };
+}
 
-    xFrac = std::clamp(xFrac, 0.0f, 1.0f);
-    yFrac = std::clamp(yFrac, 0.0f, 1.0f);
+float hrBpRpAtX(const Rectangle &r, float x) {
+    float xFrac = std::clamp((x - r.x) / fmaxf(r.width, 1.0f), 0.0f, 1.0f);
+    return HR_BPRP_MIN + xFrac * (HR_BPRP_MAX - HR_BPRP_MIN);
+}
 
-    float px = 12.0f;
-    float py = 12.0f;
+// Renders the Gaia stars once into a texture: each star is deposited
+// bilinearly, softened, then mapped with a log stretch so single giants stay
+// visible next to the dense main sequence. Colour = mean colour of the stars
+// in a pixel, whitened where the density is highest.
+void UI::buildHRDensity(int w, int h) const {
+    if (hrDensityTex.id != 0) UnloadTexture(hrDensityTex);
+    hrDensityTex = {};
+    if (w < 2 || h < 2 || hrData.empty()) return;
 
-    return { r.x + px + xFrac * (r.width - 2.0f * px),
-             r.y + py + yFrac * (r.height - 2.0f * py) };
+    const int n = w * h;
+    std::vector<float> wt(n, 0.0f), cr(n, 0.0f), cg(n, 0.0f), cb(n, 0.0f);
+    Rectangle area = {0, 0, (float)w, (float)h};
+
+    // Colour per 0.01 mag of BP-RP instead of per star
+    Color lut[531];
+    for (int i = 0; i < 531; i++)
+        lut[i] = temperatureToColor(mainSequenceTeffForBpRp(HR_BPRP_MIN + i * 0.01f));
+
+    for (const HRPoint &pt : hrData) {
+        Vector2 p  = hrToPixel(area, pt.bpRp, pt.absG);
+        float   fx = p.x - 0.5f, fy = p.y - 0.5f;
+        int     x0 = (int)floorf(fx), y0 = (int)floorf(fy);
+        float   tx = fx - x0, ty = fy - y0;
+        int     li = std::clamp((int)((pt.bpRp - HR_BPRP_MIN) * 100.0f), 0, 530);
+        Color   c  = lut[li];
+        for (int dy = 0; dy < 2; dy++) {
+            for (int dx = 0; dx < 2; dx++) {
+                int x = x0 + dx, y = y0 + dy;
+                if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                float k = (dx ? tx : 1.0f - tx) * (dy ? ty : 1.0f - ty);
+                int   i = y * w + x;
+                wt[i] += k;
+                cr[i] += k * c.r;
+                cg[i] += k * c.g;
+                cb[i] += k * c.b;
+            }
+        }
+    }
+
+    // Separable [1 2 1] / 4 blur so isolated stars become soft dots
+    std::vector<float> tmp(n);
+    for (std::vector<float> *buf : {&wt, &cr, &cg, &cb}) {
+        std::vector<float> &b = *buf;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                int i = y * w + x;
+                float l = b[i - (x > 0)], r = b[i + (x < w - 1)];
+                tmp[i] = 0.25f * l + 0.5f * b[i] + 0.25f * r;
+            }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                int i = y * w + x;
+                float u = tmp[i - (y > 0) * w], d = tmp[i + (y < h - 1) * w];
+                b[i] = 0.25f * u + 0.5f * tmp[i] + 0.25f * d;
+            }
+    }
+
+    float wMax = *std::max_element(wt.begin(), wt.end());
+    const float k = 6.0f;
+    float norm = 1.0f / log1pf(wMax * k);
+
+    Image img = GenImageColor(w, h, BLANK);
+    Color *px = (Color *)img.data;
+    for (int i = 0; i < n; i++) {
+        if (wt[i] < 0.01f) continue;
+        float d = log1pf(wt[i] * k) * norm;            // 0..1
+        float a = std::clamp(0.15f + 1.1f * d, 0.0f, 1.0f);
+        float white = 0.45f * d * d;
+        auto ch = [&](float sum) {
+            float v = sum / wt[i];
+            v = v + (255.0f - v) * white;
+            return (unsigned char)std::clamp(v, 0.0f, 255.0f);
+        };
+        px[i] = { ch(cr[i]), ch(cg[i]), ch(cb[i]), (unsigned char)(a * 255.0f) };
+    }
+    hrDensityTex = LoadTextureFromImage(img);
+    SetTextureFilter(hrDensityTex, TEXTURE_FILTER_BILINEAR);
+    UnloadImage(img);
 }
 
 void UI::drawHRDiagram(float mass) const {
@@ -678,19 +759,27 @@ void UI::drawHRDiagram(float mass) const {
              plotRect.x + plotRect.width * 0.5f - tempW * 0.5f,
              bottomY, axisFs, Color{140, 145, 170, 210});
 
-    float dotR = 3.0f * s;
-    for (auto &pt : hrData) {
-        Vector2 p = hrToPixel(plotRect, pt.teff, pt.luminosity);
-        Color col = temperatureToColor(pt.teff);
-        col.a = 120;
-        DrawCircle((int)p.x, (int)p.y, dotR, col);
+    int texW = (int)plotRect.width, texH = (int)plotRect.height;
+    if (hrDensityTex.width != texW || hrDensityTex.height != texH)
+        buildHRDensity(texW, texH);
+    if (hrDensityTex.id != 0)
+        DrawTexture(hrDensityTex, (int)plotRect.x, (int)plotRect.y, WHITE);
+
+    // Main-sequence track: where the stars you can place sit
+    {
+        Vector2 prev = {};
+        for (int i = 0; i <= 48; i++) {
+            float m = 0.1f * powf(500.0f, i / 48.0f);       // 0.1 .. 50 Msun
+            MainSequencePoint ms = mainSequence(m);
+            Vector2 p = hrToPixel(plotRect, ms.bpRp, ms.absG);
+            if (i > 0) DrawLineEx(prev, p, 1.5f * s, Color{255, 255, 255, 45});
+            prev = p;
+        }
     }
 
-    float r, l, t;
-    stellarModel(mass, 0.0f, r, l, t);
-
-    Vector2 starPos = hrToPixel(plotRect, t, l);
-    Color starCol = temperatureToColor(t);
+    MainSequencePoint ms = mainSequence(mass);
+    Vector2 starPos = hrToPixel(plotRect, ms.bpRp, ms.absG);
+    Color starCol = temperatureToColor(ms.teff);
 
     DrawCircle((int)starPos.x, (int)starPos.y, 12 * s,
                Color{starCol.r, starCol.g, starCol.b, 40});
