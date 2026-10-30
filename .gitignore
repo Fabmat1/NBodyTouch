@@ -2,6 +2,7 @@
 build/
 build-native/
 build-rpi5/
+build-sdl/
 
 # CMake cache/generated files
 CMakeCache.txt

@@ -29,6 +29,10 @@ int main(int argc, char *argv[]) {
         else if ((strcmp(argv[i], "--timeout") == 0 || strcmp(argv[i], "-t") == 0) && i + 1 < argc) {
             timeout = (float)atof(argv[++i]);
         }
+        else if (strcmp(argv[i], "--exit-on-timeout") == 0) {
+            // Timing out always exits (code 0) so a launcher/kiosk hub can take
+            // over again; the flag is accepted so the hub can request it explicitly.
+        }
         else if (strcmp(argv[i], "--quiet") == 0 || strcmp(argv[i], "-q") == 0) {
             quiet = true;
         }
@@ -42,6 +46,7 @@ int main(int argc, char *argv[]) {
             printf("  -h, --height <int>   Window height (default %d)\n", SCREEN_H);
             printf("  -r, --root   <path>  Program root directory for assets\n");
             printf("  -t, --timeout <sec>  Inactivity timeout in seconds (default 300, 0=off)\n");
+            printf("      --exit-on-timeout  Exit with code 0 on inactivity (always the case)\n");
             printf("  -q, --quiet          Suppress terminal output\n");
             printf("  -m, --mobile         Use the touch-first phone layout\n");
             return 0;
@@ -61,6 +66,5 @@ int main(int argc, char *argv[]) {
     app.inactivityTimeout = timeout;
     if (width > 0)  app.screenW = width;
     if (height > 0) app.screenH = height;
-    app.run();
-    return 0;
+    return app.run();
 }

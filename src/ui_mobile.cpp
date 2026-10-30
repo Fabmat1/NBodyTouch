@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 
 #include "ui.h"
@@ -222,6 +223,12 @@ void UI::detectSystemLanguage() {
         if (strcmp(LANGUAGES[i].code, "en") == 0) fallback = i;
     }
     currentLang = fallback;
+#else
+    // Set by the kiosk hub (de|en|es); unknown or missing keeps the default
+    const char *lang = getenv("ASTRO_LANG");
+    if (!lang) return;
+    for (int i = 0; i < LANGUAGE_COUNT; i++)
+        if (strncmp(LANGUAGES[i].code, lang, 2) == 0) { currentLang = i; return; }
 #endif
 }
 

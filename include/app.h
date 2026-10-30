@@ -12,7 +12,7 @@ public:
     float inactivityTimeout = 300.0f;
     int   screenW           = SCREEN_W;
     int   screenH           = SCREEN_H;
-    void run();
+    int  run();   // process exit code
 
 private:
     Simulation   sim;

@@ -294,7 +294,8 @@ void UI::layout() {
 
     hrRect = { panelX + 10.0f * s, 155.0f * s, panelW - 20.0f * s, 260.0f * s };
 
-    btnQuit = { panelX + 5.0f * s, (float)sh - 46.0f * s, panelW - 10.0f * s, 36.0f * s };
+    // Kiosk "back to menu" button: >= 96 px tall at 2560x1440 so it is easy to find and hit
+    btnQuit = { panelX + 8.0f * s, (float)sh - 84.0f * s, panelW - 16.0f * s, 74.0f * s };
 
     float boxW = 240.0f * s;
     float boxH = 120.0f * s;
@@ -410,10 +411,8 @@ void UI::layoutIntroPage() {
 void UI::init(int screenW, int screenH) {
     sw = screenW;
     sh = screenH;
-    if (mobile) {
-        initMobileMetrics();
-        detectSystemLanguage();
-    }
+    if (mobile) initMobileMetrics();
+    detectSystemLanguage();
 
     int codepoints[1024];
     int cpCount = 0;
@@ -1133,15 +1132,27 @@ void UI::draw(const Simulation &sim, float mass) {
     {
         Vector2 pointer = Pointer::position();
         bool over = CheckCollisionPointRec(pointer, btnQuit) && Pointer::down();
-        Color bg = over ? Color{70, 55, 55, 240} : Color{35, 30, 38, 220};
-        DrawRectangleRounded(btnQuit, 0.3f, 8, bg);
-        DrawRectangleRoundedLinesEx(btnQuit, 0.3f, 8, 1.0f * s, Color{100, 80, 90, 200});
+        Color bg = over ? Color{90, 60, 65, 245} : Color{55, 38, 46, 235};
+        DrawRectangleRounded(btnQuit, 0.25f, 8, bg);
+        DrawRectangleRoundedLinesEx(btnQuit, 0.25f, 8, 2.0f * s, Color{170, 120, 135, 230});
 
+        // Left-pointing arrow + label, shrunk to fit the longest translation
         const char *txt = loc(LKey::BackToApp);
-        float fs = 14.0f * s;
-        int tw = measureText(txt, fs);
-        drawText(txt, btnQuit.x + btnQuit.width * 0.5f - tw * 0.5f,
-                 btnQuit.y + btnQuit.height * 0.5f - fs * 0.5f, fs, Color{220,200,200,255});
+        float arrowW = 16.0f * s;
+        float gap    = 10.0f * s;
+        float fs     = 18.0f * s;
+        float maxW   = btnQuit.width - 24.0f * s - arrowW - gap;
+        int   tw     = measureText(txt, fs);
+        if (tw > maxW) { fs *= maxW / tw; tw = measureText(txt, fs); }
+
+        Color fg = {240, 220, 225, 255};
+        float x0 = btnQuit.x + (btnQuit.width - (arrowW + gap + tw)) * 0.5f;
+        float cy = btnQuit.y + btnQuit.height * 0.5f;
+        float th = 3.0f * s;
+        DrawLineEx({x0, cy}, {x0 + arrowW, cy}, th, fg);
+        DrawLineEx({x0 + th * 0.3f, cy}, {x0 + arrowW * 0.55f, cy - arrowW * 0.5f}, th, fg);
+        DrawLineEx({x0 + th * 0.3f, cy}, {x0 + arrowW * 0.55f, cy + arrowW * 0.5f}, th, fg);
+        drawText(txt, x0 + arrowW + gap, cy - fs * 0.5f, fs, fg);
     }
 
     if (debugMode) {

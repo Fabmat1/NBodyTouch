@@ -4,6 +4,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 #ifdef PLATFORM_ANDROID
@@ -17,9 +18,20 @@ static bool IsAndroidEmulator() {
         (strcmp(val, "ranchu") == 0 || strcmp(val, "goldfish") == 0)) return true;
     return false;
 }
+#else
+#include <csignal>
+#include <unistd.h>
+
+// raylib 5.5 ignores a failed platform init (no display, no GL context) and
+// then crashes in rlglInit. Turn that into a stderr message and exit code 1.
+static void OnInitWindowCrash(int) {
+    static const char msg[] = "nbody_dynamics: failed to initialise the window/graphics\n";
+    (void)!write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    _exit(1);
+}
 #endif
 
-void App::run() {
+int App::run() {
     if (quietMode) SetTraceLogLevel(LOG_NONE);
 
 #ifdef PLATFORM_ANDROID
@@ -31,7 +43,14 @@ void App::run() {
     screenH = GetScreenHeight();
 #else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    signal(SIGSEGV, OnInitWindowCrash);
     InitWindow(screenW, screenH, "N-Body Dynamics — Astrophysics Explorer");
+    signal(SIGSEGV, SIG_DFL);
+    if (!IsWindowReady()) {
+        // No dialogs: the kiosk hub logs stderr and returns to its menu
+        fprintf(stderr, "nbody_dynamics: failed to create a %dx%d window\n", screenW, screenH);
+        return 1;
+    }
     screenW = GetScreenWidth();
     screenH = GetScreenHeight();
 
@@ -220,4 +239,5 @@ void App::run() {
     ui.shutdown();
     renderer.shutdown();
     CloseWindow();
+    return 0;
 }
