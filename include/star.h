@@ -31,12 +31,12 @@ struct Star {
     std::vector<Vector3> trail;
     bool active = false;
 
-    // Camera focus (see App): 1 = counts for centre-of-mass tracking,
-    // 0 = ignored. focus is the eased value of the linear focusRamp;
-    // inView is the hysteresis state that drives the ramp.
+    // Member of the bound core (Simulation::updateBoundCore). The camera
+    // tracks the core: focus is the eased value of focusRamp, which moves
+    // towards 1 while the star is bound and towards 0 while it is not.
+    bool  bound     = false;
     float focus     = 0.0f;
     float focusRamp = 0.0f;
-    bool  inView    = false;
 
     void updateStellarProperties();
     void pushTrail();

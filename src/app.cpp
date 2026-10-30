@@ -31,31 +31,31 @@ static void OnInitWindowCrash(int) {
 }
 #endif
 
-// Stars well outside the view stop counting for centre-of-mass tracking, so
-// an ejected star does not drag the camera away from the interesting part.
-// A star enters focus once it is on screen and leaves 25 % beyond the screen
-// edge (hysteresis), and its weight eases in and out instead of switching, so
-// the tracked point glides when stars leave the view or come back by zooming out.
-static void UpdateFocus(Simulation &sim, const Camera3D &cam, int sw, int sh, float dt) {
-    constexpr float LEAVE_MARGIN = 0.25f;   // fraction of the screen size
-    constexpr float FADE_TIME    = 1.5f;    // seconds for a full fade
+// Centre-of-mass tracking follows the bound core of the system, so stars
+// (or pairs) that get flung out do not drag the camera along, independent of
+// where the camera looks. A star's weight eases in and out over FADE_TIME when
+// it leaves or joins the core, so the tracked point glides instead of jumping.
+static void UpdateFocus(Simulation &sim, float dt) {
+    constexpr float FADE_TIME = 1.5f;   // seconds for a full fade
 
-    Vector3 fwd  = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
-    float   step = dt / FADE_TIME;
+    sim.updateBoundCore();
+    float step = dt / FADE_TIME;
     for (int i = 0; i < sim.starCount; i++) {
         Star &s = sim.stars[i];
         if (!s.active) continue;
-        bool    front = Vector3DotProduct(Vector3Subtract(s.pos, cam.position), fwd) > 0.0f;
-        Vector2 p     = GetWorldToScreenEx(s.pos, cam, sw, sh);
-        float   u = p.x / sw, v = p.y / sh;
-        bool inside  = front && u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f;
-        bool farOut  = !front || u < -LEAVE_MARGIN || u > 1.0f + LEAVE_MARGIN ||
-                                 v < -LEAVE_MARGIN || v > 1.0f + LEAVE_MARGIN;
-        if (inside)      s.inView = true;
-        else if (farOut) s.inView = false;
-        s.focusRamp = Clamp(s.focusRamp + (s.inView ? step : -step), 0.0f, 1.0f);
+        s.focusRamp = Clamp(s.focusRamp + (s.bound ? step : -step), 0.0f, 1.0f);
         s.focus     = s.focusRamp * s.focusRamp * (3.0f - 2.0f * s.focusRamp);
     }
+}
+
+// Stars on screen (with a margin) are never culled, so nothing visibly vanishes
+static bool IsOnScreen(const Camera3D &cam, Vector3 pos, int sw, int sh) {
+    constexpr float MARGIN = 0.1f;   // fraction of the screen size
+    Vector3 fwd = Vector3Subtract(cam.target, cam.position);
+    if (Vector3DotProduct(Vector3Subtract(pos, cam.position), fwd) <= 0.0f) return false;
+    Vector2 p = GetWorldToScreenEx(pos, cam, sw, sh);
+    float   u = p.x / sw, v = p.y / sh;
+    return u > -MARGIN && u < 1.0f + MARGIN && v > -MARGIN && v < 1.0f + MARGIN;
 }
 
 // Mass- and focus-weighted centre: the point the camera tracks. Weights only
@@ -154,9 +154,10 @@ int App::run() {
         sim.step(dt);
 
         // ── Camera focus + culling of stars that escaped for good ─────────
-        UpdateFocus(sim, renderer.camera, screenW, screenH, dt);
+        UpdateFocus(sim, dt);
         for (int i = sim.starCount - 1; i >= 0; i--) {
-            if (sim.stars[i].focus < 0.01f && sim.isNegligibleEscaper(i))
+            if (sim.isNegligibleEscaper(i) &&
+                !IsOnScreen(renderer.camera, sim.stars[i].pos, screenW, screenH))
                 sim.removeStar(i);
         }
 

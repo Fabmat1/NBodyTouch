@@ -80,6 +80,66 @@ bool Simulation::isNegligibleEscaper(int i) const {
     return 2.0f * (s.mass / mRest) * q * q * q < MAX_TIDAL;
 }
 
+void Simulation::updateBoundCore() {
+    // Hysteresis as a fraction of a star's potential well: members leave only
+    // when clearly unbound, outsiders join only when clearly bound
+    constexpr float HYSTERESIS = 0.1f;
+
+    bool cand[MAX_STARS];
+    int  nCand = 0;
+    for (int i = 0; i < starCount; i++) {
+        cand[i] = stars[i].active;
+        nCand  += cand[i];
+    }
+
+    while (nCand > 1) {
+        float   mTot = 0.0f;
+        Vector3 pTot = {0, 0, 0};   // total momentum
+        for (int i = 0; i < starCount; i++) {
+            if (!cand[i]) continue;
+            mTot += stars[i].mass;
+            pTot  = Vector3Add(pTot, Vector3Scale(stars[i].vel, stars[i].mass));
+        }
+
+        int   worst      = -1;
+        float worstScore = 0.0f;
+        for (int i = 0; i < starCount; i++) {
+            if (!cand[i]) continue;
+            const Star &s = stars[i];
+            float mRest = mTot - s.mass;
+            if (mRest <= 0.0f) continue;
+
+            // Potential of the other candidates at this star
+            float phi = 0.0f;
+            for (int j = 0; j < starCount; j++) {
+                if (j == i || !cand[j]) continue;
+                Vector3 d = Vector3Subtract(stars[j].pos, s.pos);
+                phi -= G_CONST * stars[j].mass /
+                       sqrtf(Vector3DotProduct(d, d) + softening * softening);
+            }
+            // Energy of its orbit relative to the rest (per reduced mass);
+            // for two stars this is exactly the two-body binding criterion
+            Vector3 vRest = Vector3Scale(Vector3Subtract(pTot, Vector3Scale(s.vel, s.mass)),
+                                         1.0f / mRest);
+            Vector3 v     = Vector3Subtract(s.vel, vRest);
+            float   well  = phi * (mRest + s.mass) / mRest;
+            float   e     = 0.5f * Vector3DotProduct(v, v) + well;
+            float   excess = s.bound ? e + HYSTERESIS * well : e - HYSTERESIS * well;
+            if (excess <= 0.0f) continue;
+
+            // Of the unbound ones drop the star carrying most of the energy,
+            // i.e. the faster / lighter one, so the slow massive core stays
+            float score = excess * mRest / mTot;
+            if (score > worstScore) { worstScore = score; worst = i; }
+        }
+        if (worst < 0) break;
+        cand[worst] = false;
+        nCand--;
+    }
+
+    for (int i = 0; i < starCount; i++) stars[i].bound = cand[i];
+}
+
 void Simulation::computeAccelerations(const State &s, int n, Vector3 *accel) const {
     for (int i = 0; i < n; i++) accel[i] = {0, 0, 0};
 

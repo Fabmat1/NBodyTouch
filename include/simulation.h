@@ -19,6 +19,10 @@ public:
     // and far enough that its tidal pull on them no longer matters.
     bool isNegligibleEscaper(int i) const;
 
+    // Marks the stars that stay together (Star::bound): repeatedly drops the
+    // most unbound star until all remaining ones are bound to each other.
+    void updateBoundCore();
+
 private:
     struct State {
         Vector3 pos[MAX_STARS];
