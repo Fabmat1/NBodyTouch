@@ -1130,6 +1130,25 @@ void UI::drawIntroDialog() {
     }
 }
 
+// Relative speed of two stars (total mass M) on a circular orbit at
+// separation d under the simulation's softened gravity
+static float circularSpeed(const Simulation &sim, float M, float d) {
+    float e2 = sim.softening * sim.softening;
+    return sqrtf(G_CONST * M * d * d / powf(d * d + e2, 1.5f));
+}
+
+// Circular binary of two equal stars (mass m each, separation d) whose centre
+// of mass sits at com and moves with vcom; phase rotates the pair in the
+// plane, sense = -1 makes it orbit the other way round
+static void addBinary(Simulation &sim, Vector3 com, Vector3 vcom,
+                      float m, float d, float phase, float sense = 1.0f) {
+    float   u = 0.5f * circularSpeed(sim, 2.0f * m, d) * sense;
+    Vector3 r = {cosf(phase) * d * 0.5f, 0, sinf(phase) * d * 0.5f};
+    Vector3 v = {-sinf(phase) * u, 0, cosf(phase) * u};
+    sim.addStar(Vector3Add(com, r),      Vector3Add(vcom, v),      m, 0.0f);
+    sim.addStar(Vector3Subtract(com, r), Vector3Subtract(vcom, v), m, 0.0f);
+}
+
 void UI::loadScenario(int idx, Simulation &sim) {
     sim.clear();
     resetCameraRequested = true;
@@ -1151,13 +1170,18 @@ void UI::loadScenario(int idx, Simulation &sim) {
             break;
         }
         case 1: {
-            // Fantastic Four — hierarchical quadruple
-            // Inner binary: 2×3 M☉ at ±1.5 (sep 3, tight)
-            // Outer binary: 2×0.3 M☉ at 12.75 and 11.25 (local COM at 12, sep 1.5)
-            sim.addStar({-0.2571f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, +8.0470f}, 3.0f, 0.0f);
-            sim.addStar({-1.4571f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -6.0952f}, 3.0f, 0.0f);
-            sim.addStar({+5.4429f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -1.7729f}, 0.5f, 0.0f);
-            sim.addStar({+4.8429f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -9.9379f}, 0.5f, 0.0f);
+            // Fantastic Four — two binaries (2×3 M☉, separation 3, and a
+            // counter-rotating 2×1 M☉ pair, separation 3.5; both wider than
+            // the softening) whose centres of mass orbit each other on an
+            // ellipse (a = 12, e = 0.3, starting at apoapsis). Holds for 6-7
+            // regular outer orbits (~95 s), then the two pairs fly apart
+            // (find_scenarios.py).
+            const float mA = 3.0f, mB = 1.0f;
+            const float MA = 2.0f * mA, MB = 2.0f * mB, M = MA + MB;
+            const float a = 12.0f, e = 0.3f, R = a * (1.0f + e);
+            const float v = sqrtf(G_CONST * M * (1.0f - e) / R);   // relative speed at apoapsis
+            addBinary(sim, {-R * MB / M, 0, 0}, {0, 0, -v * MB / M}, mA, 3.0f, 2.356f);
+            addBinary(sim, { R * MA / M, 0, 0}, {0, 0,  v * MA / M}, mB, 3.5f, 2.356f, -1.0f);
             break;
         }
         case 2: {
@@ -1173,11 +1197,13 @@ void UI::loadScenario(int idx, Simulation &sim) {
             break;
         }
         case 3: {
-            // Infinity — Chenciner-Montgomery figure-eight
-
-            sim.addStar({+5.8200f, +0.0000f, -1.4585f}, {+1.7023f, +0.0000f, +1.5788f}, 2.0f, 0.0f);
-            sim.addStar({-5.8200f, +0.0000f, +1.4585f}, {+1.7023f, +0.0000f, +1.5788f}, 2.0f, 0.0f);
-            sim.addStar({+0.0000f, +0.0000f, +0.0000f}, {-3.4047f, +0.0000f, -3.1576f}, 2.0f, 0.0f);
+            // Infinity — Chenciner-Montgomery figure-eight (3×8 M☉, size
+            // ~12, period 14.6 s), re-solved by shooting for the sim's
+            // softened gravity so it stays periodic (find_scenarios.py)
+            const float x = 11.640052f, z = -2.428952f, vx = 2.322821f, vz = 2.281070f;
+            sim.addStar({ x, 0,  z}, {vx, 0, vz}, 8.0f, 0.0f);
+            sim.addStar({-x, 0, -z}, {vx, 0, vz}, 8.0f, 0.0f);
+            sim.addStar({ 0, 0,  0}, {-2.0f * vx, 0, -2.0f * vz}, 8.0f, 0.0f);
             break;
         }
         case 4: {
@@ -1190,11 +1216,19 @@ void UI::loadScenario(int idx, Simulation &sim) {
             break;
         }
         case 5: {
-            // Wider binary + test particle offset perpendicular with
-            // retrograde x-velocity → long-lived bouncing before escape
-            sim.addStar({ 10.0f, 0, 0}, {0, 0,  4.999f}, 25.0f, 0.0f);
-            sim.addStar({-10.0f, 0, 0}, {0, 0, -4.999f}, 25.0f, 0.0f);
-            sim.addStar({  0.0f, 0, 1.5f}, {-1.2f, 0, 0}, 0.1f, 0.0f);
+            // Ping Pong — circular 2×25 M☉ binary and a very light star on a
+            // stable periodic orbit (in the binary's rotating frame) that loops
+            // around one heavy star, is handed over to the other and back:
+            // an exchange every ~5.5 s (find_scenarios.py). It is kept light
+            // (0.02 M☉) so it does not knock the binary off its circle.
+            const float R = 10.0f, M = 25.0f;
+            const float u = 0.5f * circularSpeed(sim, 2.0f * M, 2.0f * R);
+            sim.addStar({ R, 0, 0}, {0, 0,  u}, M, 0.0f);
+            sim.addStar({-R, 0, 0}, {0, 0, -u}, M, 0.0f);
+            // Start between the stars, moving perpendicular to their axis in
+            // the rotating frame (w0), converted to the inertial frame
+            const float x0 = 6.5f, w0 = -20.722568f, omega = u / R;
+            sim.addStar({x0, 0, 0}, {0, 0, w0 + omega * x0}, 0.02f, 0.0f);
             break;
         }
     }
