@@ -2,6 +2,7 @@
 
 #include "simulation.h"
 #include <cmath>
+#include <utility>
 
 int Simulation::addStar(Vector3 pos, Vector3 vel, float mass, float age) {
     if (starCount >= MAX_STARS) return -1;
@@ -27,6 +28,56 @@ void Simulation::clear() {
         stars[i].trail.clear();
     }
     starCount = 0;
+}
+
+void Simulation::removeStar(int i) {
+    if (i < 0 || i >= starCount) return;
+    int last = starCount - 1;
+    if (i != last) stars[i] = std::move(stars[last]);
+    stars[last] = Star{};
+    starCount--;
+}
+
+bool Simulation::isNegligibleEscaper(int i) const {
+    constexpr float MIN_DISTANCE = 150.0f;   // never cull anything close by
+    constexpr float MAX_TIDAL    = 1e-4f;    // tidal pull / the rest's own gravity
+
+    const Star &s = stars[i];
+    if (!s.active) return false;
+
+    // Centre of mass, velocity and size of all the other stars
+    float   mRest = 0.0f;
+    Vector3 rRest = {0, 0, 0}, vRest = {0, 0, 0};
+    for (int j = 0; j < starCount; j++) {
+        if (j == i || !stars[j].active) continue;
+        mRest += stars[j].mass;
+        rRest  = Vector3Add(rRest, Vector3Scale(stars[j].pos, stars[j].mass));
+        vRest  = Vector3Add(vRest, Vector3Scale(stars[j].vel, stars[j].mass));
+    }
+    if (mRest <= 0.0f) return false;
+    rRest = Vector3Scale(rRest, 1.0f / mRest);
+    vRest = Vector3Scale(vRest, 1.0f / mRest);
+
+    Vector3 r = Vector3Subtract(s.pos, rRest);
+    Vector3 v = Vector3Subtract(s.vel, vRest);
+    float   d = Vector3Length(r);
+    if (d < MIN_DISTANCE || Vector3DotProduct(r, v) <= 0.0f) return false;
+
+    // Two-body energy relative to the rest: >= 0 means it never comes back
+    float energy = 0.5f * Vector3DotProduct(v, v) - G_CONST * (mRest + s.mass) / d;
+    if (energy <= 0.0f) return false;
+
+    // Its tidal acceleration across the rest (size R) relative to their own
+    // gravity: (2 G m R / d^3) / (G M / R^2) = 2 (m / M) (R / d)^3
+    float size2 = 0.0f;
+    for (int j = 0; j < starCount; j++) {
+        if (j == i || !stars[j].active) continue;
+        Vector3 dj = Vector3Subtract(stars[j].pos, rRest);
+        size2 += stars[j].mass * Vector3DotProduct(dj, dj);
+    }
+    float R = fmaxf(sqrtf(size2 / mRest), softening);
+    float q = R / d;
+    return 2.0f * (s.mass / mRest) * q * q * q < MAX_TIDAL;
 }
 
 void Simulation::computeAccelerations(const State &s, int n, Vector3 *accel) const {

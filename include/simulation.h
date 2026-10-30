@@ -13,6 +13,11 @@ public:
     int  addStar(Vector3 pos, Vector3 vel, float mass, float age);
     void step(float dt);
     void clear();
+    void removeStar(int i);
+
+    // Star i is escaping for good: unbound from the other stars, moving away,
+    // and far enough that its tidal pull on them no longer matters.
+    bool isNegligibleEscaper(int i) const;
 
 private:
     struct State {

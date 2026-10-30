@@ -31,6 +31,48 @@ static void OnInitWindowCrash(int) {
 }
 #endif
 
+// Stars well outside the view stop counting for centre-of-mass tracking, so
+// an ejected star does not drag the camera away from the interesting part.
+// A star enters focus once it is on screen and leaves 25 % beyond the screen
+// edge (hysteresis), and its weight eases in and out instead of switching, so
+// the tracked point glides when stars leave the view or come back by zooming out.
+static void UpdateFocus(Simulation &sim, const Camera3D &cam, int sw, int sh, float dt) {
+    constexpr float LEAVE_MARGIN = 0.25f;   // fraction of the screen size
+    constexpr float FADE_TIME    = 1.5f;    // seconds for a full fade
+
+    Vector3 fwd  = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
+    float   step = dt / FADE_TIME;
+    for (int i = 0; i < sim.starCount; i++) {
+        Star &s = sim.stars[i];
+        if (!s.active) continue;
+        bool    front = Vector3DotProduct(Vector3Subtract(s.pos, cam.position), fwd) > 0.0f;
+        Vector2 p     = GetWorldToScreenEx(s.pos, cam, sw, sh);
+        float   u = p.x / sw, v = p.y / sh;
+        bool inside  = front && u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f;
+        bool farOut  = !front || u < -LEAVE_MARGIN || u > 1.0f + LEAVE_MARGIN ||
+                                 v < -LEAVE_MARGIN || v > 1.0f + LEAVE_MARGIN;
+        if (inside)      s.inView = true;
+        else if (farOut) s.inView = false;
+        s.focusRamp = Clamp(s.focusRamp + (s.inView ? step : -step), 0.0f, 1.0f);
+        s.focus     = s.focusRamp * s.focusRamp * (3.0f - 2.0f * s.focusRamp);
+    }
+}
+
+// Mass- and focus-weighted centre: the point the camera tracks. Weights only
+// matter relative to each other, so even faded-out stars give a stable
+// centre; with no focus at all (no stars) `centre` keeps its last value.
+static void UpdateFocusCentre(const Simulation &sim, Vector3 &centre) {
+    Vector3 c = {0, 0, 0};
+    float   w = 0.0f;
+    for (int i = 0; i < sim.starCount; i++) {
+        const Star &s = sim.stars[i];
+        if (!s.active) continue;
+        c = Vector3Add(c, Vector3Scale(s.pos, s.mass * s.focus));
+        w += s.mass * s.focus;
+    }
+    if (w > 0.0f) centre = Vector3Scale(c, 1.0f / w);
+}
+
 int App::run() {
     if (quietMode) SetTraceLogLevel(LOG_NONE);
 
@@ -72,7 +114,8 @@ int App::run() {
     Vector3 trackStartOffset = Vector3Subtract(renderer.camera.position,
                                                renderer.camera.target);
 
-    float inactivityTimer = 0.0f;
+    float   inactivityTimer = 0.0f;
+    Vector3 com             = {0, 0, 0};   // tracked (focus-weighted) centre
 
     while (!WindowShouldClose() && !ui.quitRequested) {
         float dt = GetFrameTime();
@@ -99,16 +142,8 @@ int App::run() {
                 break;
         }
 
-        // ── Compute centre of mass (for input handler) ───────────────────
-        Vector3 com       = {0, 0, 0};
-        float   totalMass = 0.0f;
-        for (int i = 0; i < sim.starCount; i++) {
-            if (!sim.stars[i].active) continue;
-            com = Vector3Add(com, Vector3Scale(sim.stars[i].pos, sim.stars[i].mass));
-            totalMass += sim.stars[i].mass;
-        }
-        if (totalMass > 0.0f)
-            com = Vector3Scale(com, 1.0f / totalMass);
+        // ── Tracked centre (input handler keeps drags fixed to it) ────────
+        UpdateFocusCentre(sim, com);
 
         input.currentCOM        = com;
         input.comTrackingActive = ui.trackingCOM;
@@ -117,6 +152,13 @@ int App::run() {
         ui.update(sim, input.sliderMass);
         input.update(sim, renderer, ui, dt);
         sim.step(dt);
+
+        // ── Camera focus + culling of stars that escaped for good ─────────
+        UpdateFocus(sim, renderer.camera, screenW, screenH, dt);
+        for (int i = sim.starCount - 1; i >= 0; i--) {
+            if (sim.stars[i].focus < 0.01f && sim.isNegligibleEscaper(i))
+                sim.removeStar(i);
+        }
 
         if (IsKeyPressed(KEY_SPACE))
             sim.timeScale = (sim.timeScale > 0.001f) ? 0.0f : 1.0f;
@@ -151,16 +193,8 @@ int App::run() {
             ui.trackBlend  = 0.0f;
         }
 
-        // ── Recompute COM after sim step for camera tracking ──────────────
-        com       = {0, 0, 0};
-        totalMass = 0.0f;
-        for (int i = 0; i < sim.starCount; i++) {
-            if (!sim.stars[i].active) continue;
-            com = Vector3Add(com, Vector3Scale(sim.stars[i].pos, sim.stars[i].mass));
-            totalMass += sim.stars[i].mass;
-        }
-        if (totalMass > 0.0f)
-            com = Vector3Scale(com, 1.0f / totalMass);
+        // ── Recompute tracked centre after the sim step ───────────────────
+        UpdateFocusCentre(sim, com);
 
         if (ui.trackingCOM && sim.starCount > 0) {
             ui.trackBlend += dt / 0.5f;
