@@ -9,6 +9,7 @@ int main(int argc, char *argv[]) {
     bool  quiet   = false;
     bool  mobile  = false;
     float timeout = 300.0f;
+    int   fps     = 60;
     int   width   = SCREEN_W;
     int   height  = SCREEN_H;
 
@@ -39,6 +40,9 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--mobile") == 0 || strcmp(argv[i], "-m") == 0) {
             mobile = true;
         }
+        else if ((strcmp(argv[i], "--fps") == 0 || strcmp(argv[i], "-f") == 0) && i + 1 < argc) {
+            fps = atoi(argv[++i]);
+        }
         else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("  -d, --debug          Show FPS and debug info\n");
@@ -49,6 +53,7 @@ int main(int argc, char *argv[]) {
             printf("      --exit-on-timeout  Exit with code 0 on inactivity (always the case)\n");
             printf("  -q, --quiet          Suppress terminal output\n");
             printf("  -m, --mobile         Use the touch-first phone layout\n");
+            printf("  -f, --fps    <int>   Target FPS (default 60, 0 = uncapped)\n");
             return 0;
         }
     }
@@ -63,6 +68,7 @@ int main(int argc, char *argv[]) {
     app.debugMode         = debug;
     app.quietMode         = quiet;
     app.mobileUI          = mobile;
+    app.targetFPS         = fps;
     app.inactivityTimeout = timeout;
     if (width > 0)  app.screenW = width;
     if (height > 0) app.screenH = height;

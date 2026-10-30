@@ -10,6 +10,7 @@ public:
     bool  quietMode         = false;
     bool  mobileUI          = false;
     float inactivityTimeout = 300.0f;
+    int   targetFPS         = 60;
     int   screenW           = SCREEN_W;
     int   screenH           = SCREEN_H;
     int  run();   // process exit code

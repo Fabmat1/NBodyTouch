@@ -11,8 +11,18 @@ public:
     void update(Simulation &sim, Renderer &renderer, const UI &ui, float dt);
 
     bool    isDragging()   const { return dragging && multiTouchCooldown <= 0.0f; }
-    Vector3 getDragStart() const { return dragStart; }
-    Vector3 getDragEnd()   const { return dragEnd; }
+    Vector3 getDragStart() const {
+        if (dragging && dragWithCOMTracking) {
+            return Vector3Add(dragStart, Vector3Subtract(currentCOM, comAtDragStart));
+        }
+        return dragStart;
+    }
+    Vector3 getDragEnd() const {
+        if (dragging && dragWithCOMTracking) {
+            return Vector3Add(dragEnd, Vector3Subtract(currentCOM, comAtDragStart));
+        }
+        return dragEnd;
+    }
 
     bool    showInvalidSpawn() const { return invalidSpawnTimer > 0.0f; }
     Vector2 invalidSpawnPos()  const { return invalidScreenPos; }

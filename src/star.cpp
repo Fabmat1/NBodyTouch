@@ -32,40 +32,51 @@ void stellarModel(float mass, float age,
 // Attempt a perceptually correct blackbody → sRGB mapping
 // that keeps cool stars red/orange (not magenta).
 Color temperatureToColor(float tempK) {
-    // Normalize to 0..1 range across our temp span
-    float t = std::clamp((tempK - 2000.0f) / (38000.0f), 0.0f, 1.0f);
-
     float r, g, b;
 
-    if (t < 0.10f) {
-        // 2000–5800 K  deep red → orange
-        float f = t / 0.10f;
+    if (tempK < 3500.0f) {
+        // M-type: deep red → red-orange
+        float f = (tempK - 2000.0f) / 1500.0f;
+        f = std::clamp(f, 0.0f, 1.0f);
         r = 1.0f;
-        g = 0.15f + 0.35f * f;
-        b = 0.0f;
-    } else if (t < 0.20f) {
-        // 5800–9600 K  orange → yellow-white
-        float f = (t - 0.10f) / 0.10f;
+        g = 0.35f + 0.25f * f;
+        b = 0.10f + 0.10f * f;
+    } else if (tempK < 5000.0f) {
+        // K-type: orange → orange-yellow
+        float f = (tempK - 3500.0f) / 1500.0f;
         r = 1.0f;
-        g = 0.50f + 0.45f * f;
-        b = 0.1f + 0.5f * f;
-    } else if (t < 0.35f) {
-        // 9600–15300 K  yellow-white → white
-        float f = (t - 0.20f) / 0.15f;
-        r = 1.0f - 0.05f * f;
-        g = 0.95f + 0.05f * f;
-        b = 0.60f + 0.40f * f;
-    } else if (t < 0.55f) {
-        // 15300–22900 K  white → blue-white
-        float f = (t - 0.35f) / 0.20f;
-        r = 0.95f - 0.30f * f;
-        g = 1.0f  - 0.15f * f;
+        g = 0.60f + 0.25f * f;
+        b = 0.20f + 0.40f * f;
+    } else if (tempK < 6000.0f) {
+        // G-type (Sun): yellow → pale yellow-white
+        float f = (tempK - 5000.0f) / 1000.0f;
+        r = 1.0f;
+        g = 0.85f + 0.10f * f;
+        b = 0.60f + 0.30f * f;
+    } else if (tempK < 7500.0f) {
+        // F-type: pale yellow → white
+        float f = (tempK - 6000.0f) / 1500.0f;
+        r = 1.0f - 0.02f * f;
+        g = 0.95f + 0.03f * f;
+        b = 0.90f + 0.10f * f;
+    } else if (tempK < 10000.0f) {
+        // A-type: white → blue-white
+        float f = (tempK - 7500.0f) / 2500.0f;
+        r = 0.98f - 0.15f * f;
+        g = 0.98f - 0.05f * f;
+        b = 1.0f;
+    } else if (tempK < 20000.0f) {
+        // B-type: blue-white → light blue
+        float f = (tempK - 10000.0f) / 10000.0f;
+        r = 0.83f - 0.25f * f;
+        g = 0.93f - 0.20f * f;
         b = 1.0f;
     } else {
-        // 22900–40000 K  blue-white → blue
-        float f = (t - 0.55f) / 0.45f;
-        r = 0.65f - 0.25f * f;
-        g = 0.85f - 0.25f * f;
+        // O-type: light blue → deeper blue
+        float f = (tempK - 20000.0f) / 30000.0f;
+        f = std::clamp(f, 0.0f, 1.0f);
+        r = 0.58f - 0.10f * f;
+        g = 0.73f - 0.15f * f;
         b = 1.0f;
     }
 

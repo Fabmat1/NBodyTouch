@@ -44,6 +44,13 @@ enum class LKey {
     MobileIntroPage3,
     MobileIntroPage4,
     MobileIntroPage5,
+    Scenarios,
+    ScenarioTriple,
+    ScenarioFour,
+    ScenarioFreefall,
+    ScenarioInfinity,
+    ScenarioRecursion,
+    ScenarioPingPong,
     COUNT
 };
 
@@ -138,6 +145,13 @@ inline const Language LANGUAGES[] = {
                 "Tippe hier, um die Masse des nächsten Sterns zu wählen. "
                 "Schwere Sterne sind heißer, blauer und viel heller – im "
                 "H-R-Diagramm siehst du, wo sie liegen.",
+            /*Scenarios*/        "Szenarien",
+            /*ScenarioTriple*/   "Triple Problem",
+            /*ScenarioFour*/     "Fantastic Four",
+            /*ScenarioFreefall*/ "Freier Fall",
+            /*ScenarioInfinity*/ "Unendlichkeit",
+            /*ScenarioRecursion*/"Rekursion",
+            /*ScenarioPingPong*/ "Ping Pong",
         }
     },
     {
@@ -217,6 +231,13 @@ inline const Language LANGUAGES[] = {
                 "Tap here to choose the mass of the next star. Heavier "
                 "stars are hotter, bluer and much brighter – the H-R "
                 "diagram shows where they sit.",
+            /*Scenarios*/        "Scenarios",
+            /*ScenarioTriple*/   "Triple Problem",
+            /*ScenarioFour*/     "Fantastic Four",
+            /*ScenarioFreefall*/ "Freefall",
+            /*ScenarioInfinity*/ "Infinity",
+            /*ScenarioRecursion*/"Recursion",
+            /*ScenarioPingPong*/ "Ping Pong",
         }
     },
     {
@@ -302,6 +323,13 @@ inline const Language LANGUAGES[] = {
                 "Las estrellas más pesadas son más calientes, más azules "
                 "y mucho más brillantes: mira dónde aparecen en el "
                 "diagrama H-R.",
+            /*Scenarios*/        "Escenarios",
+            /*ScenarioTriple*/   "Problema Triple",
+            /*ScenarioFour*/     "Los Cuatro",
+            /*ScenarioFreefall*/ "Caída Libre",
+            /*ScenarioInfinity*/ "Infinito",
+            /*ScenarioRecursion*/"Recursión",
+            /*ScenarioPingPong*/ "Ping Pong",
         }
     },
 };

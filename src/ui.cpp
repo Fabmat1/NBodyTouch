@@ -43,8 +43,16 @@ int UI::measureText(const char *text, float size) const {
 
 void UI::drawTextWrapped(const char *text, Rectangle bounds,
                          float fontSize, Color color) const {
-    float lineH  = fontSize * 1.4f;
-    float spaceW = (float)measureText(" ", fontSize);
+    const float spacing = 1.0f;
+    float lineH = fontSize * 1.4f;
+
+    auto measureF = [&](const char *s) -> float {
+        if (fontLoaded) return MeasureTextEx(uiFont, s, fontSize, spacing).x;
+        return (float)MeasureText(s, (int)fontSize);
+    };
+
+    float spaceW = measureF(" ");
+
     float x = bounds.x;
     float y = bounds.y;
 
@@ -73,7 +81,7 @@ void UI::drawTextWrapped(const char *text, Rectangle bounds,
         word[wlen] = '\0';
         p += wlen;
 
-        float ww = (float)measureText(word, fontSize);
+        float ww = measureF(word);
 
         if (x + ww > bounds.x + bounds.width && x > bounds.x) {
             x = bounds.x;
@@ -82,7 +90,11 @@ void UI::drawTextWrapped(const char *text, Rectangle bounds,
         }
 
         drawText(word, x, y, fontSize, color);
-        x += ww;
+
+        // Advance by the word's real width PLUS one spacing unit,
+        // so the next word's first glyph matches the inter-char rhythm
+        // used inside DrawTextEx itself.
+        x += ww + spacing;
     }
 }
 
@@ -236,31 +248,29 @@ void UI::loadFlags() {
     }
 }
 
-// ── Intro image loading ────────────────────────────────────────
-
-void UI::loadIntroImages() {
-    static const char *paths[INTRO_IMAGE_COUNT] = {
-        "assets/intro/page1_touch_drag.png",
-        "assets/intro/page2_zoom.png",
-        "assets/intro/page2_pan.png",
-        "assets/intro/page3_speed.png",
-        "assets/intro/page4_zoom.png",
-        "assets/intro/page5_back.png",
+void UI::loadScenarioImages() {
+    static const char *paths[SCENARIO_COUNT] = {
+        "assets/scenarios/triple.png",
+        "assets/scenarios/fantastic_four.png",
+        "assets/scenarios/freefall.png",
+        "assets/scenarios/infinity.png",
+        "assets/scenarios/recursion.png",
+        "assets/scenarios/ping_pong.png",
     };
-    for (int i = 0; i < INTRO_IMAGE_COUNT; i++) {
+    for (int i = 0; i < SCENARIO_COUNT; i++) {
         const char *fullPath = AssetPath(paths[i]);
 #ifndef PLATFORM_ANDROID
         if (!FileExists(fullPath)) {
-            introImagesLoaded[i] = false;
+            scenarioImagesLoaded[i] = false;
             continue;
         }
 #endif
-        introImages[i] = LoadTexture(fullPath);
-        if (introImages[i].id != 0) {
-            SetTextureFilter(introImages[i], TEXTURE_FILTER_BILINEAR);
-            introImagesLoaded[i] = true;
+        scenarioImages[i] = LoadTexture(fullPath);
+        if (scenarioImages[i].id != 0) {
+            SetTextureFilter(scenarioImages[i], TEXTURE_FILTER_BILINEAR);
+            scenarioImagesLoaded[i] = true;
         } else {
-            introImagesLoaded[i] = false;
+            scenarioImagesLoaded[i] = false;
         }
     }
 }
@@ -293,6 +303,24 @@ void UI::layout() {
     massSlider.label  = loc(LKey::MassSun);
 
     hrRect = { panelX + 10.0f * s, 155.0f * s, panelW - 20.0f * s, 260.0f * s };
+    
+    float scPad    = 6.0f * s;
+    float scGap    = 5.0f * s;
+    float scBtnW   = (panelW - 2.0f * scPad - scGap) * 0.5f;
+    float scBtnH   = 85.0f * s;
+    float scHeadH  = 22.0f * s;
+    float gridY = hrRect.y + hrRect.height + 38.0f * s + scHeadH;
+
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 2; col++) {
+            int idx = row * 2 + col;
+            scenarioBtns[idx] = {
+                panelX + scPad + col * (scBtnW + scGap),
+                gridY + row * (scBtnH + scGap),
+                scBtnW, scBtnH
+            };
+        }
+    }
 
     // Kiosk "back to menu" button: >= 96 px tall at 2560x1440 so it is easy to find and hit
     btnQuit = { panelX + 8.0f * s, (float)sh - 84.0f * s, panelW - 16.0f * s, 74.0f * s };
@@ -347,15 +375,13 @@ void UI::layoutIntroPage() {
     float pad = 16.0f * s;
 
     if (introPage == 0) {
-        float dlgW = fminf(520.0f * s, (float)sw * 0.50f);
+        float dlgW = fminf(440.0f * s, (float)sw * 0.50f);
         float dlgH = fminf(380.0f * s, (float)sh * 0.55f);
         float dlgX = ((float)sw - dlgW) * 0.5f;
         float dlgY = ((float)sh - dlgH) * 0.5f;
         introTooltipRect = { dlgX, dlgY, dlgW, dlgH };
     } else if (introPage == 1) {
-        float tw = 400.0f * s;
-        float th = 280.0f * s;
-        introTooltipRect = { 12.0f * s, 60.0f * s, tw, th };
+        introTooltipRect = { 12.0f * s, 60.0f * s, 360.0f * s, 160.0f * s };
     } else {
         Rectangle anchor = {};
         bool anchorAbove = false;
@@ -367,19 +393,19 @@ void UI::layoutIntroPage() {
             case 4: anchor = btnQuit;         anchorAbove = true; anchorLeft = true; break;
         }
 
-        float tw = 360.0f * s;
-        float th = 220.0f * s;
-        float tx, ty;
+        float tw, th;
+        if (introPage == 3) {
+            tw = 380.0f * s;
+            th = 180.0f * s;
+        } else {
+            tw = 340.0f * s;
+            th = 160.0f * s;
+        }
 
-        if (anchorAbove)
-            ty = anchor.y - th - 10.0f * s;
-        else
-            ty = anchor.y + anchor.height + 10.0f * s;
-
-        if (anchorLeft)
-            tx = anchor.x;
-        else
-            tx = anchor.x + anchor.width * 0.5f - tw * 0.5f;
+        float tx = anchorLeft ? anchor.x
+                              : anchor.x + anchor.width * 0.5f - tw * 0.5f;
+        float ty = anchorAbove ? anchor.y - th - 10.0f * s
+                               : anchor.y + anchor.height + 10.0f * s;
 
         tx = std::clamp(tx, 8.0f * s, (float)sw - tw - 8.0f * s);
         ty = std::clamp(ty, 8.0f * s, (float)sh - th - 8.0f * s);
@@ -405,7 +431,6 @@ void UI::layoutIntroPage() {
         navY, navBtnW, navBtnH
     };
 }
-
 // ── UI init ────────────────────────────────────────────────────
 
 void UI::init(int screenW, int screenH) {
@@ -462,7 +487,7 @@ void UI::init(int screenW, int screenH) {
     timeSlider.snapStep = 0.25f;
 
     loadFlags();
-    loadIntroImages();
+    loadScenarioImages();
     layout();
 
     loadHRData(AssetPath("assets/hr_data.csv"));
@@ -482,10 +507,10 @@ void UI::shutdown() {
             flagsLoaded[i] = false;
         }
     }
-    for (int i = 0; i < INTRO_IMAGE_COUNT; i++) {
-        if (introImagesLoaded[i]) {
-            UnloadTexture(introImages[i]);
-            introImagesLoaded[i] = false;
+    for (int i = 0; i < SCENARIO_COUNT; i++) {
+        if (scenarioImagesLoaded[i]) {
+            UnloadTexture(scenarioImages[i]);
+            scenarioImagesLoaded[i] = false;
         }
     }
 }
@@ -570,7 +595,9 @@ static Vector2 hrToPixel(const Rectangle &r, float teff, float lum) {
     float tMin = 2000.0f, tMax = 40000.0f;
     float lMin = -4.5f,   lMax = 6.5f;
 
-    float xFrac = 1.0f - (teff - tMin) / (tMax - tMin);
+    float tClamped = std::clamp(teff, tMin, tMax);
+    float xFrac = 1.0f - (log10f(tClamped) - log10f(tMin)) /
+                         (log10f(tMax)     - log10f(tMin));
     float yFrac = 1.0f - (log10f(fmaxf(lum, 1e-6f)) - lMin) / (lMax - lMin);
 
     xFrac = std::clamp(xFrac, 0.0f, 1.0f);
@@ -828,6 +855,82 @@ void UI::updateIntroDialog() {
     }
 }
 
+void UI::drawScenarios() const {
+    float s = scale();
+    Vector2 pointer = Pointer::position();
+
+    static const LKey titleKeys[SCENARIO_COUNT] = {
+        LKey::ScenarioTriple,   LKey::ScenarioFour,
+        LKey::ScenarioFreefall, LKey::ScenarioInfinity,
+        LKey::ScenarioRecursion, LKey::ScenarioPingPong,
+    };
+
+    // Header
+    float headerY = scenarioBtns[0].y - 22.0f * s;
+    float headerFs = 14.0f * s;
+    drawText(loc(LKey::Scenarios),
+             scenarioBtns[0].x, headerY, headerFs,
+             Color{180, 185, 215, 255});
+
+    for (int i = 0; i < SCENARIO_COUNT; i++) {
+        Rectangle r = scenarioBtns[i];
+        bool over   = CheckCollisionPointRec(pointer, r) && Pointer::down();
+
+        Color bg     = over ? Color{55, 60, 90, 245} : Color{25, 28, 42, 235};
+        Color border = over ? Color{110, 140, 210, 230} : Color{60, 65, 90, 200};
+        DrawRectangleRounded(r, 0.1f, 8, bg);
+        DrawRectangleRoundedLinesEx(r, 0.1f, 8, 1.0f * s, border);
+
+        // Preview image
+        float titleH = 20.0f * s;
+        float imgPad = 4.0f * s;
+        Rectangle imgR = {
+            r.x + imgPad, r.y + imgPad,
+            r.width - 2.0f * imgPad,
+            r.height - titleH - imgPad
+        };
+
+        if (scenarioImagesLoaded[i]) {
+            float ia = (float)scenarioImages[i].width /
+                       (float)scenarioImages[i].height;
+            float ba = imgR.width / imgR.height;
+            Rectangle dst;
+            if (ia > ba)
+                dst = { imgR.x, imgR.y + (imgR.height - imgR.width / ia) * 0.5f,
+                        imgR.width, imgR.width / ia };
+            else
+                dst = { imgR.x + (imgR.width - imgR.height * ia) * 0.5f, imgR.y,
+                        imgR.height * ia, imgR.height };
+            DrawTexturePro(scenarioImages[i],
+                {0, 0, (float)scenarioImages[i].width,
+                       (float)scenarioImages[i].height},
+                dst, {0, 0}, 0.0f, WHITE);
+        } else {
+            DrawRectangleRounded(imgR, 0.06f, 8, Color{18, 20, 30, 220});
+            DrawRectangleRoundedLinesEx(imgR, 0.06f, 8, 1.0f * s,
+                                        Color{45, 50, 70, 180});
+            const char *ph = "?";
+            float pfs = imgR.height * 0.4f;
+            int pw = measureText(ph, pfs);
+            drawText(ph, imgR.x + (imgR.width - pw) * 0.5f,
+                     imgR.y + (imgR.height - pfs) * 0.5f, pfs,
+                     Color{70, 75, 100, 200});
+        }
+
+        // Title
+        const char *title = loc(titleKeys[i]);
+        float tfs = 10.0f * s;
+        int tw = measureText(title, tfs);
+        float maxTW = r.width - 6.0f * s;
+        if (tw > maxTW) tfs = tfs * maxTW / (float)tw;
+        tw = measureText(title, tfs);
+        drawText(title,
+                 r.x + (r.width - tw) * 0.5f,
+                 r.y + r.height - titleH + (titleH - tfs) * 0.5f,
+                 tfs, Color{215, 220, 240, 255});
+    }
+}
+
 // ── Intro dialog draw ──────────────────────────────────────────
 
 void UI::drawIntroDialog() {
@@ -879,82 +982,19 @@ void UI::drawIntroDialog() {
         LKey::IntroPage1, LKey::IntroPage2, LKey::IntroPage3,
         LKey::IntroPage4, LKey::IntroPage5,
     };
-    // Image indices per page: {first, second} (-1 = none)
-    static const int pageImgs[][2] = {
-        { 0, -1}, { 1,  2}, { 3, -1}, { 4, -1}, { 5, -1},
-    };
 
-    float navH   = 32.0f * s + pad + 8.0f * s;
+    float navH = 32.0f * s + pad + 18.0f * s;
     float topPad = pad + (introPage == 0 ? 8.0f * s : 2.0f * s);
 
-    auto drawImgFit = [&](int idx, Rectangle b) {
-        if (idx < 0 || idx >= INTRO_IMAGE_COUNT) return;
-        if (introImagesLoaded[idx]) {
-            float ia = (float)introImages[idx].width / (float)introImages[idx].height;
-            float ba = b.width / b.height;
-            Rectangle dst;
-            if (ia > ba)
-                dst = { b.x, b.y + (b.height - b.width / ia) * 0.5f,
-                        b.width, b.width / ia };
-            else
-                dst = { b.x + (b.width - b.height * ia) * 0.5f, b.y,
-                        b.height * ia, b.height };
-            DrawTexturePro(introImages[idx],
-                {0, 0, (float)introImages[idx].width, (float)introImages[idx].height},
-                dst, {0, 0}, 0.0f, WHITE);
-        } else {
-            DrawRectangleRounded(b, 0.05f, 8, Color{30, 32, 48, 220});
-            DrawRectangleRoundedLinesEx(b, 0.05f, 8, 1.5f * s,
-                                        Color{55, 60, 85, 180});
-            static const char *imgDescs[] = {
-                "[ Touch & Drag ]", "[ Zoom / Rotate ]", "[ Pan ]",
-                "[ Speed Controls ]", "[ Zoom Panel ]", "[ Back Button ]",
-            };
-            const char *desc = (idx >= 0 && idx < INTRO_IMAGE_COUNT)
-                               ? imgDescs[idx] : "[ ? ]";
-            float pfs = 11.0f * s;
-            int dtw = measureText(desc, pfs);
-            drawText(desc, b.x + (b.width - dtw) * 0.5f,
-                     b.y + (b.height - pfs) * 0.5f, pfs,
-                     Color{100, 105, 130, 180});
-        }
+    Rectangle textB = {
+        r.x + pad,
+        r.y + topPad,
+        r.width  - 2.0f * pad,
+        r.height - topPad - navH
     };
-
-    if (introPage == 0) {
-        // Page 1: text left, image right
-        float imgW  = r.width * 0.36f;
-        float textW = r.width - 2.0f * pad - imgW - 8.0f * s;
-        float textH = r.height - topPad - navH;
-        Rectangle textB = { r.x + pad, r.y + topPad, textW, textH };
-        drawTextWrapped(loc(pageKeys[0]), textB, 14.0f * s,
-                        Color{210, 215, 235, 255});
-        Rectangle imgB = { r.x + r.width - pad - imgW, r.y + topPad, imgW, textH };
-        drawImgFit(pageImgs[0][0], imgB);
-    } else {
-        // Pages 2-5: text top ~50%, images bottom ~50%
-        float contentH = r.height - topPad - navH;
-        float textH    = contentH * 0.48f;
-        float gap      = 6.0f * s;
-        float imgH     = contentH - textH - gap;
-        float contentW = r.width - 2.0f * pad;
-
-        Rectangle textB = { r.x + pad, r.y + topPad, contentW, textH };
-        drawTextWrapped(loc(pageKeys[introPage]), textB, 13.0f * s,
-                        Color{210, 215, 235, 255});
-
-        float imgY = r.y + topPad + textH + gap;
-        if (pageImgs[introPage][1] >= 0) {
-            float halfW = (contentW - gap) * 0.5f;
-            Rectangle leftB  = { r.x + pad, imgY, halfW, imgH };
-            Rectangle rightB = { r.x + pad + halfW + gap, imgY, halfW, imgH };
-            drawImgFit(pageImgs[introPage][0], leftB);
-            drawImgFit(pageImgs[introPage][1], rightB);
-        } else {
-            Rectangle imgB = { r.x + pad + contentW * 0.15f, imgY,
-                               contentW * 0.7f, imgH };
-            drawImgFit(pageImgs[introPage][0], imgB);
-        }
-    }
+    float textFs = (introPage == 0) ? 14.0f * s : 13.0f * s;
+    drawTextWrapped(loc(pageKeys[introPage]), textB, textFs,
+                    Color{210, 215, 235, 255});
 
     // Page dots
     {
@@ -962,7 +1002,7 @@ void UI::drawIntroDialog() {
         float dotSpc = dotR * 2.0f + 6.0f * s;
         float totalW = dotSpc * (INTRO_PAGE_COUNT - 1);
         float startX = r.x + r.width * 0.5f - totalW * 0.5f;
-        float dotsY  = introBtnNext.y + introBtnNext.height * 0.5f;
+        float dotsY = introBtnNext.y - 10.0f * s;
 
         for (int i = 0; i < INTRO_PAGE_COUNT; i++) {
             float cx = startX + i * dotSpc;
@@ -998,6 +1038,76 @@ void UI::drawIntroDialog() {
         drawText(txt, introBtnBack.x + introBtnBack.width * 0.5f - tw * 0.5f,
                  introBtnBack.y + introBtnBack.height * 0.5f - fs * 0.5f, fs,
                  Color{200, 200, 220, 255});
+    }
+}
+
+void UI::loadScenario(int idx, Simulation &sim) {
+    sim.clear();
+    resetCameraRequested = true;
+    trackingCOM = false;
+    trackBlend  = 0.0f;
+
+    switch (idx) {
+        case 0: {
+            // Triple Problem — equilateral triangle, one vertex perturbed
+            const float L = 10.0f;
+            const float R = L / sqrtf(3.0f);
+            const float v = sqrtf(G_CONST * 1.0f / L);
+
+            sim.addStar({R + 0.01f, 0, 0},        {0, 0, v},              1.0f, 0.0f);
+            sim.addStar({-R * 0.5f, 0,  R * 0.866025f},
+                        {-v * 0.866025f, 0, -v * 0.5f},                  1.0f, 0.0f);
+            sim.addStar({-R * 0.5f, 0, -R * 0.866025f},
+                        { v * 0.866025f, 0, -v * 0.5f},                  1.0f, 0.0f);
+            break;
+        }
+        case 1: {
+            // Fantastic Four — hierarchical quadruple
+            // Inner binary: 2×3 M☉ at ±1.5 (sep 3, tight)
+            // Outer binary: 2×0.3 M☉ at 12.75 and 11.25 (local COM at 12, sep 1.5)
+            sim.addStar({-0.2571f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, +8.0470f}, 3.0f, 0.0f);
+            sim.addStar({-1.4571f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -6.0952f}, 3.0f, 0.0f);
+            sim.addStar({+5.4429f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -1.7729f}, 0.5f, 0.0f);
+            sim.addStar({+4.8429f, +0.0000f, +0.0000f}, {+0.0000f, +0.0000f, -9.9379f}, 0.5f, 0.0f);
+            break;
+        }
+        case 2: {
+            // Freefall — 5×0.1 M☉ in eccentric pentagonal orbits around 10 M☉
+            sim.addStar({0, 0, 0}, {0, 0, 0}, 10.0f, 0.0f);
+            const float r = 20.0f;
+            const float v = 2.45f;   // e ≈ 0.7
+            sim.addStar({  r,      0,   0.0f   }, { 0.0f,     0,  v      }, 0.1f, 0.0f);
+            sim.addStar({  6.18f,  0,  19.02f  }, {-2.330f,   0,  0.757f }, 0.1f, 0.0f);
+            sim.addStar({-16.18f,  0,  11.76f  }, {-1.440f,   0, -1.982f }, 0.1f, 0.0f);
+            sim.addStar({-16.18f,  0, -11.76f  }, { 1.440f,   0, -1.982f }, 0.1f, 0.0f);
+            sim.addStar({  6.18f,  0, -19.02f  }, { 2.330f,   0,  0.757f }, 0.1f, 0.0f);
+            break;
+        }
+        case 3: {
+            // Infinity — Chenciner-Montgomery figure-eight
+
+            sim.addStar({+5.8200f, +0.0000f, -1.4585f}, {+1.7023f, +0.0000f, +1.5788f}, 2.0f, 0.0f);
+            sim.addStar({-5.8200f, +0.0000f, +1.4585f}, {+1.7023f, +0.0000f, +1.5788f}, 2.0f, 0.0f);
+            sim.addStar({+0.0000f, +0.0000f, +0.0000f}, {-3.4047f, +0.0000f, -3.1576f}, 2.0f, 0.0f);
+            break;
+        }
+        case 4: {
+            // Recursion — nested hierarchy 25 / 5 / 1 / 0.5 / 0.1 M☉
+            sim.addStar({  0, 0,   0}, {0, 0, -2.89f}, 25.0f, 0.0f);
+            sim.addStar({  4, 0,   0}, {0, 0, 14.43f},  5.0f, 0.0f);
+            sim.addStar({  0, 0,  10}, {-11.14f, 0, 0}, 1.0f, 0.0f);
+            sim.addStar({-18, 0,   0}, {0, 0, -8.37f},  0.5f, 0.0f);
+            sim.addStar({  0, 0, -25}, { 7.11f, 0, 0},  0.1f, 0.0f);
+            break;
+        }
+        case 5: {
+            // Wider binary + test particle offset perpendicular with
+            // retrograde x-velocity → long-lived bouncing before escape
+            sim.addStar({ 10.0f, 0, 0}, {0, 0,  4.999f}, 25.0f, 0.0f);
+            sim.addStar({-10.0f, 0, 0}, {0, 0, -4.999f}, 25.0f, 0.0f);
+            sim.addStar({  0.0f, 0, 1.5f}, {-1.2f, 0, 0}, 0.1f, 0.0f);
+            break;
+        }
     }
 }
 
@@ -1066,6 +1176,12 @@ void UI::update(Simulation &sim, float &outMass) {
             if (CheckCollisionPointRec(Pointer::touchPosition(t), btnTrackCOM))
                 trackHit = true;
         if (trackHit && !showIntroDialog) trackToggleRequested = true;
+        for (int i = 0; i < SCENARIO_COUNT; i++) {
+            if (CheckCollisionPointRec(pos, scenarioBtns[i])) {
+                loadScenario(i, sim);
+                break;
+            }
+        }
     }
 
     if (Pointer::pressed()) {
@@ -1103,6 +1219,8 @@ void UI::draw(const Simulation &sim, float mass) {
         float counterY = hrRect.y + hrRect.height + 22.0f * s;
         drawText(buf, rightPanel.x + 15 * s, counterY, 13 * s, Color{100,105,130,255});
     }
+    
+    drawScenarios();
 
     drawZoomControls();
 
